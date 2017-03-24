@@ -17,7 +17,8 @@ db.variant_chr21_1_1.find({"chr": "21", "start": 9411413, "ref": "T"}, {"files.s
 db.variant_chr21_1_1.find({"chr": "21", "ids.0": "rs181691356", "ref":"C"}, {"files.samp":1});
 
 //List cell lines that are homozygous/heterozygous for allele X at position X on chromosome X
-
+db.variants_hsap_87_87_mod.find({"chr": "21", "start": 9541066, "ref": "T", "files.samp.0|1": {$exists: true}}, 
+									  {"files": {$elemMatch: {"samp.0|1": {$exists: true}}}, "files.samp.0|1": 1});
 
 //Find cell lines with X to X mutation in ensembl ID ENSTXXXXXXXXXXX residue XXXX
 db.variant_chr21_1_1.find({"chr": "21", "annot.ct.enst": "ENST00000459169", "ref": "G", "alt":"T"}, {"files.samp":1});
