@@ -2,14 +2,18 @@ import pandas as pd, sys, functools, numpy as np, operator,os,gzip
 from itertools import islice, groupby, count
 from sklearn.cross_validation import train_test_split
 
-if sys.argv.__len__() != 2:
-    print("Usage: Assess_Genotype_Distribution.py <VCF_FilePath>")
+if sys.argv.__len__() != 3:
+    print("Usage: Assess_Genotype_Distribution.py <VCF_FilePath> <ChunkSize>")
     sys.exit(0)
 
 vcfDir = sys.argv[1]
+chunkSize = int(sys.argv[2])
 
 targetVCFFileName = os.path.join(vcfDir, "Stratified_Sample.vcf")
-os.remove(targetVCFFileName)
+try:
+    os.remove(targetVCFFileName)
+except Exception:
+    pass
 targetVCFFileHandle = open(targetVCFFileName, "a")
 
 firstPass = True
@@ -45,23 +49,34 @@ for vcfFileName in os.listdir(vcfDir):
         columnList = vcfDF.columns.tolist()
         sampleColumnList = columnList[columnList.index("FORMAT")+1:]
 
-        reader = pd.read_table(vcfFileName, sep = '\t', skiprows=numRowsToSkip, chunksize=10000, iterator=True, low_memory=False, engine='c', compression='gzip')
+        reader = pd.read_table(vcfFileName, sep = '\t', skiprows=numRowsToSkip, chunksize=chunkSize, iterator=True, low_memory=False, engine='c', compression='gzip')
         for chunk in reader:
             vcfDF = chunk
-
+            vcfDF[sampleColumnList[0]] = vcfDF[sampleColumnList[0]].map(lambda x: x.split(":")[0])
+            vcfDF = vcfDF[vcfDF[sampleColumnList[0]] != "./."]
+            vcfDF = vcfDF.reset_index()
             # Generate stratified sample
             featuresToLook = ["#CHROM", "INFO", "FORMAT"]
-            train, test = train_test_split(vcfDF[featuresToLook], test_size=0.001,random_state=0, train_size=0)
+            train, test = train_test_split(vcfDF[featuresToLook], test_size=0.1,random_state=0, train_size=0)
             vcfDF.iloc[test.index].to_csv(targetVCFFileHandle, header=False, index=False, sep="\t")
 
 targetVCFFileHandle.close()
 
-reader = pd.read_table(targetVCFFileName, sep='\t', skiprows=numRowsToSkip, chunksize=10000, iterator=True,low_memory=False, engine='c')
+reader = pd.read_table(targetVCFFileName, sep='\t', skiprows=numRowsToSkip, chunksize=10, iterator=True, low_memory=False,
+                       engine='c')
+vcfDF = reader.get_chunk(10)
+columnList = vcfDF.columns.tolist()
+sampleColumnList = columnList[columnList.index("FORMAT") + 1:]
+
+reader = pd.read_table(targetVCFFileName, sep='\t', skiprows=numRowsToSkip, chunksize=chunkSize, iterator=True,low_memory=False, engine='c')
 chunkNo = 0
+genotypeCountDict = {}
 for chunk in reader:
     vcfDF = chunk
     sampleDFValues = pd.melt(vcfDF[sampleColumnList], id_vars=[], var_name="sample")
     sampleDFValues["value"] = sampleDFValues["value"].map(lambda x: x.split(":")[0])
+    sampleDFValues = sampleDFValues[sampleDFValues["value"] != "./."]
+
     resultDict = dict(sampleDFValues["value"].value_counts())
     if not genotypeCountDict:
         genotypeCountDict = resultDict
