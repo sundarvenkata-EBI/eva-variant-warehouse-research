@@ -1,3 +1,7 @@
+#########################
+# Update to flip the "def" key into a value in the "files.samp" sub-document in Variant documents
+#########################
+
 from collections import OrderedDict
 
 from bson import CodecOptions, SON, json_util
