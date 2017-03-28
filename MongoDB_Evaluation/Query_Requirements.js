@@ -44,3 +44,10 @@ db.variant_chr21_1_1_sample_mod.find({$and: [{"chr":"21", "start": {$gte: 109975
   }
 ]})
 
+db.variant_chr21_1_1_sample_mod.find({$and: [{"chr": "21"}, {"start": 9411413}, {"ref": "T"}, 
+  {$or: [{"files.samp.0|0": numericSampleIndex},
+	  	{"files": {$elemMatch: {"samp.0|0": {$elemMatch: {s: {$lte: numericSampleIndex}, e: {$gte:numericSampleIndex}}} , fid: fileID}}}
+	  	]
+  }
+]})
+
