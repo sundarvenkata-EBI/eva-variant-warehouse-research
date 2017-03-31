@@ -43,7 +43,7 @@ db = client["eva_testing"]
 srcCollHandle = db["variant_chr21_1_1"]
 destCollHandle = db["variant_chr21_1_1_sample_mod"]
 
-docHandles = srcCollHandle.aggregate([ { "$sample": { "size": 100 }}])
+docHandles = srcCollHandle.find()
 for docHandle in docHandles:
     filesDocIndex = 0
     docChangeFlag = False
@@ -96,5 +96,3 @@ for docHandle in docHandles:
         print(u"Updating document: {0}".format(docHandle["_id"]))
         destCollHandle.update({"_id": docHandle["_id"]}, docHandle)
         docChangeFlag = False
-
-

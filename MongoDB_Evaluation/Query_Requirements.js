@@ -35,14 +35,22 @@ db.variant_chr21_1_1.find({"chr": "21", "annot.ct.enst" : {$in: ["ENST0000045916
 //List cell lines with mutation from X to X at rsXXXXXXXX
 db.variant_chr21_1_1.find({"chr": "21", "ids": "rs181691356", "ref": "G", "alt":"T"}, {"files.samp":1});
 
+//Return all samples with a homozygous/heterozygous reference for allele X at position X on chromosome X
+db.variant_chr21_1_1_sample_mod.find({"chr": "21", "start": 9411413, "ref": "T", "files.samp.0|0": {$exists: true}}, {"files.samp.0|0":1})
+
 //List Variants in a given region and only those that are homozygous in sample X
 var numericSampleIndex = db.files_1_1.findOne( {"fid" : "8605" }, {"samp.HG00116":1})["samp"]["HG00116"]
+
+db.variant_chr21_1_1_sample_mod.ensureIndex({"files.samp.0|0":1}, {sparse: true});
+db.variant_chr21_1_1_sample_mod.ensureIndex({"files.samp.0|0.s":1}, {sparse: true});
+db.variant_chr21_1_1_sample_mod.ensureIndex({"files.samp.0|0.e":1}, {sparse: true});
 db.variant_chr21_1_1_sample_mod.find({$and: [{"chr":"21", "start": {$gte: 10997575}, "end": {$lte: 18639593}}, 
   {$or: [{"files.samp.0|0": numericSampleIndex},
 	  	{"files": {$elemMatch: {"samp.0|0": {$elemMatch: {s: {$lte: numericSampleIndex}, e: {$gte:numericSampleIndex}}} , fid: "8605"}}}
 	  	]
   }
-]})
+]});
+
 
 db.variant_chr21_1_1_sample_mod.find({$and: [{"chr": "21"}, {"start": 9411413}, {"ref": "T"}, 
   {$or: [{"files.samp.0|0": numericSampleIndex},
