@@ -40,10 +40,10 @@ db = client["admin"]
 db.authenticate(os.environ["MONGODEV_UNAME"], os.environ["MONGODEV_PASS"])
 
 db = client["eva_testing"]
-srcCollHandle = db["variant_chr21_1_1"]
-destCollHandle = db["variant_chr21_1_1_sample_mod"]
+srcCollHandle = db["variants_hsap_87_87"]
+destCollHandle = db["variants_hsap_87_87_sample_mod"]
 
-docHandles = srcCollHandle.find()
+docHandles = srcCollHandle.find().limit(100)
 for docHandle in docHandles:
     filesDocIndex = 0
     docChangeFlag = False
@@ -64,7 +64,7 @@ for docHandle in docHandles:
 
 
 docHandles = destCollHandle.find()
-filesCollHandle = db["files_1_1"]
+filesCollHandle = db["files_100MB"]
 docChangeFlag = False
 
 for docHandle in docHandles:
