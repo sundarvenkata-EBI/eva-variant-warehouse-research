@@ -43,7 +43,7 @@ db = client["eva_testing"]
 srcCollHandle = db["variants_hsap_87_87"]
 destCollHandle = db["variants_hsap_87_87_sample_mod"]
 
-docHandles = srcCollHandle.find().limit(100)
+docHandles = srcCollHandle.find().limit(30000)
 for docHandle in docHandles:
     filesDocIndex = 0
     docChangeFlag = False
