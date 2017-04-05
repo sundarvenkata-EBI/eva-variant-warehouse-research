@@ -92,11 +92,15 @@ def insertDocs(sampleDocs, postgresHost, postgresUser, postgresPassword):
     postgresCursor.close()
     postgresDBHandle.close()
 
-sampleDocs = list(srcCollHandle.find().limit(30000))
 print("Start Time:" + str(datetime.datetime.now()))
-processList = [Process(target=insertDocs, args=(sampleDocs[i:i+3750], postgresHost, postgresUser, postgresPassword)) for i in range(0,len(sampleDocs),3750)]
-for process in processList:
-    process.start()
-for process in processList:
-    process.join()
+numRecordsToMigrate = 1000000
+step = 20000
+numProcessors = 8
+for i in range(0, numRecordsToMigrate, step):
+    sampleDocs = list(srcCollHandle.find().skip(i).limit(step))
+    processList = [Process(target=insertDocs, args=(sampleDocs[i:i+(step/numProcessors)], postgresHost, postgresUser, postgresPassword)) for i in range(0,len(sampleDocs),(step/numProcessors))]
+    for process in processList:
+        process.start()
+    for process in processList:
+        process.join()
 print("End Time:" + str(datetime.datetime.now()))
