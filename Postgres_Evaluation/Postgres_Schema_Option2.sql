@@ -77,7 +77,7 @@ create index start_1 on public_1.variant(start_pos);
 create index end_1 on public_1.variant(end_pos);
 select version();
 set random_page_cost to 100;
-explain select * from public_1.variant where chrom = '3' and start_pos >= 11919 and end_pos <= 17058 ;
+explain select * from public_1.variant where chrom = '3' and start_pos >= 11919 and end_pos <= 60263869 limit 100;
 select * from public_1.variant where character_length(var_id) > 50;
 select var_id from public_1.variant group by 1 having count(*) > 1;
 select var_id, genotype, rng_start, rng_end from public_1.variant_sample_attrs where rng_start is not null group by 1,2,3,4 having count(*) > 1;
