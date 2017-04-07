@@ -6,6 +6,11 @@ import pymongo
 import collections, datetime, random
 import sys, json, os, pprint
 
+mongoDevClient = MongoClient(os.environ["MONGODEV_INSTANCE"])
+mongoDevDBHandle = mongoDevClient["admin"]
+mongoDevDBHandle.authenticate(os.environ["MONGODEV_UNAME"], os.environ["MONGODEV_PASS"])
+mongoDevDBHandle = mongoDevClient["eva_testing"]
+
 mongoProdClient = MongoClient(guiutils.promptGUIInput("Host", "Host"))
 mongoProdUname = guiutils.promptGUIInput("User", "User")
 mongoProdPwd = guiutils.promptGUIInput("Pass", "Pass", "*")
@@ -24,7 +29,33 @@ margin = 1000000
 for i in range(0, numRuns):
     pos = random.randint(minChromPos, maxChromPos)
     startTime = datetime.datetime.now()
-    resultList = list(mongoProdCollHandle_2.find({"chr":"15",  "start": {"$gt": pos - margin},"start": {"$lte": pos + margin}, "end": {"$gte": pos}, "end": {"$lt": pos + margin + margin}, "files.samp.0|0": {"$exists": "true"}}).sort([("chr", pymongo.ASCENDING), ("start", pymongo.ASCENDING)]).limit(1000))
+    # Return all samples with homozygous reference for allele X at position X on chromosome X
+    resultList = list(mongoProdCollHandle_2.find({"chr":"15", "ref": "T","start": {"$gt": pos - margin},"start": {"$lte": pos + margin}, "end": {"$gte": pos}, "end": {"$lt": pos + margin + margin}, "files.samp.0|0": {"$exists": "true"}}).sort([("chr", pymongo.ASCENDING), ("start", pymongo.ASCENDING)]).limit(1000))
+    endTime = datetime.datetime.now()
+    cumulativeExecTime += ((endTime - startTime).total_seconds())
+print("Average Execution time:{0}".format(cumulativeExecTime/numRuns))
+
+numRuns = 30
+minChromPos= 50000000
+maxChromPos = 100000000
+cumulativeExecTime = 0
+margin = 1000000
+for i in range(0, numRuns):
+    pos = random.randint(minChromPos, maxChromPos)
+    startTime = datetime.datetime.now()
+    # Return all samples with homozygous reference for allele X at position X on chromosome X
+    fileID = mongoDevDBHandle["files_1_1"].find_one({"fname" : "ALL.chr21.phase3_shapeit2_mvncall_integrated_v3plus_nounphased.rsID.genotypes.vcf.gz" })["fid"]
+    numericSampleIndex = mongoDevDBHandle["files_1_1"].find_one({"fname" : "ALL.chr21.phase3_shapeit2_mvncall_integrated_v3plus_nounphased.rsID.genotypes.vcf.gz" }
+, {"samp.HG00116":1})["samp"]["HG00116"]
+    query = {"$and": [{"chr":"21"}, {"start": {"$gte": 9411513}}, {"end": {"$lte": 10411513}},
+              {"$or": [{"files.samp.0|0": numericSampleIndex},
+                    {"files": {"$elemMatch": {"samp.0|0": {"$elemMatch": {"s": {"$lte": numericSampleIndex}, "e": {"$gte":numericSampleIndex}}}
+                    , "fid": fileID}}}
+                    ]
+              }
+            ]}
+
+    resultList = list(mongoDevDBHandle["variants_"].find(query).sort([("chr", pymongo.ASCENDING), ("start", pymongo.ASCENDING)]).limit(1000))
     endTime = datetime.datetime.now()
     cumulativeExecTime += ((endTime - startTime).total_seconds())
 print("Average Execution time:{0}".format(cumulativeExecTime/numRuns))

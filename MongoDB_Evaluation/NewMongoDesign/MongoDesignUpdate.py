@@ -1,11 +1,9 @@
 #########################
 # Update to flip the "def" key into a value in the "files.samp" sub-document in Variant documents
 #########################
-
-from collections import OrderedDict
-
 from bson import CodecOptions, SON, json_util
 from pymongo import MongoClient
+from commonpyutils import guiutils
 import collections
 import sys, json, os, pprint
 
@@ -40,10 +38,19 @@ db = client["admin"]
 db.authenticate(os.environ["MONGODEV_UNAME"], os.environ["MONGODEV_PASS"])
 
 db = client["eva_testing"]
-srcCollHandle = db["variants_hsap_87_87"]
-destCollHandle = db["variants_hsap_87_87_sample_mod"]
+srcCollHandle = db["variant_chr21_1_1"]
+destCollHandle = db["variant_chr21_1_1_sample_mod"]
 
-docHandles = srcCollHandle.find().limit(1000000)
+mongoProdClient = MongoClient(guiutils.promptGUIInput("Host", "Host"))
+mongoProdUname = guiutils.promptGUIInput("User", "User")
+mongoProdPwd = guiutils.promptGUIInput("Pass", "Pass", "*")
+mongoProdDBHandle = mongoProdClient["admin"]
+mongoProdDBHandle.authenticate(mongoProdUname, mongoProdPwd)
+mongoProdDBHandle = mongoProdClient["eva_hsapiens_grch37"]
+
+mongoProdCollHandle = mongoProdDBHandle["variants_1_1"]
+
+docHandles = mongoProdCollHandle.find({"chr":"21"}).limit(10000000)
 for docHandle in docHandles:
     filesDocIndex = 0
     docChangeFlag = False
@@ -64,34 +71,35 @@ for docHandle in docHandles:
 
 
 docHandles = destCollHandle.find()
-filesCollHandle = db["files_100MB"]
+filesCollHandle = mongoProdDBHandle["files_1_2"]
 docChangeFlag = False
 
 for docHandle in docHandles:
     filesDocIndex = 0
     for fileSubDoc in docHandle["files"]:
         fileDocHandle = filesCollHandle.find({"fid": fileSubDoc["fid"]}).next()
-        numericallyIndexedFiles = {v: k for k, v in fileDocHandle["samp"].iteritems()}
-        numericSampleIndices = numericallyIndexedFiles.keys()
+        if fileDocHandle:
+            numericallyIndexedFiles = {v: k for k, v in fileDocHandle["samp"].iteritems()}
+            numericSampleIndices = numericallyIndexedFiles.keys()
 
-        sampleArray = []
-        rangeDoc = []
-        defaultGenotype = None
-        if "samp" in fileSubDoc:
-            sampleDoc = fileSubDoc["samp"]
-            for key in sampleDoc.keys():
-                value = sampleDoc[key]
-                if value != "def":
-                    sampleDoc[key] = convertNumberArrayToRange(sampleDoc[key])
-                    fileSubDoc["samp"][key] = sampleDoc[key]
-                    sampleArray.extend(value)
-                else:
-                    defaultGenotype = key
-            sampleDoc[defaultGenotype] = convertNumberArrayToRange(set(numericSampleIndices) - set(sampleArray))
-            fileSubDoc["samp"][defaultGenotype] = sampleDoc[defaultGenotype]
-            docHandle["files"][filesDocIndex] = fileSubDoc
-            filesDocIndex += 1
-            docChangeFlag = True
+            sampleArray = []
+            rangeDoc = []
+            defaultGenotype = None
+            if "samp" in fileSubDoc:
+                sampleDoc = fileSubDoc["samp"]
+                for key in sampleDoc.keys():
+                    value = sampleDoc[key]
+                    if value != "def":
+                        sampleDoc[key] = convertNumberArrayToRange(sampleDoc[key])
+                        fileSubDoc["samp"][key] = sampleDoc[key]
+                        sampleArray.extend(value)
+                    else:
+                        defaultGenotype = key
+                sampleDoc[defaultGenotype] = convertNumberArrayToRange(set(numericSampleIndices) - set(sampleArray))
+                fileSubDoc["samp"][defaultGenotype] = sampleDoc[defaultGenotype]
+                docHandle["files"][filesDocIndex] = fileSubDoc
+                filesDocIndex += 1
+                docChangeFlag = True
     if docChangeFlag:
         print(u"Updating document: {0}".format(docHandle["_id"]))
         destCollHandle.update({"_id": docHandle["_id"]}, docHandle)
