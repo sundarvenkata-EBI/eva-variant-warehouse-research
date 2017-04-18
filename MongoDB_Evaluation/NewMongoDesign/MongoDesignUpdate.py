@@ -48,9 +48,9 @@ mongoProdDBHandle = mongoProdClient["admin"]
 mongoProdDBHandle.authenticate(mongoProdUname, mongoProdPwd)
 mongoProdDBHandle = mongoProdClient["eva_hsapiens_grch37"]
 
-mongoProdCollHandle = mongoProdDBHandle["variants_1_1"]
+mongoProdCollHandle = mongoProdDBHandle["variants_1_2"]
 
-docHandles = mongoProdCollHandle.find({"chr":"21"}).limit(10000000)
+docHandles = mongoProdCollHandle.find({"chr":"X"}).limit(6000000)
 for docHandle in docHandles:
     filesDocIndex = 0
     docChangeFlag = False
@@ -77,6 +77,7 @@ docChangeFlag = False
 for docHandle in docHandles:
     filesDocIndex = 0
     for fileSubDoc in docHandle["files"]:
+        print(fileSubDoc["fid"])
         fileDocHandle = filesCollHandle.find({"fid": fileSubDoc["fid"]}).next()
         if fileDocHandle:
             numericallyIndexedFiles = {v: k for k, v in fileDocHandle["samp"].iteritems()}
