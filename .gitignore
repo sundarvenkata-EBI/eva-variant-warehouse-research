@@ -29,3 +29,4 @@ nb-configuration.xml
 *.log
 
 *.csv
+Postgres_Evaluation/MongoExportToCSV/tempDB
