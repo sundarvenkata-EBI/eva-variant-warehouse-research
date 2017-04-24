@@ -160,7 +160,8 @@ for doc in chromosome_LB_UB_Map:
     else:
         numRecordsToMigrate = doc["numEntries"]
         if (totNumRecordsProcessed + numRecordsToMigrate) > totalAllowedRecords: continue
-        postgresConnHandle.execute("insert into public_1.reg_chrom values ('{0}','{1}')".format(chromosome, socket.getfqdn()))
+        dmlCursor = postgresConnHandle.cursor()
+        dmlCursor.execute("insert into public_1.reg_chrom values ('{0}','{1}')".format(chromosome, socket.getfqdn()))
         postgresConnHandle.commit()
         print("Processing chromosome: {0}".format(chromosome))
         step = 20000
