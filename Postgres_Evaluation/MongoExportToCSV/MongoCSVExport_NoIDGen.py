@@ -4,10 +4,10 @@ from collections import OrderedDict
 # from commonpyutils import guiutils
 from bson import CodecOptions, SON, json_util
 from pymongo import MongoClient
-import multiprocessing, pgdb, socket
+import multiprocessing, psycopg2, socket
 from multiprocessing import Process, Pipe
-from psycopg2.pool import SimpleConnectionPool
-from contextlib import contextmanager
+#from psycopg2.pool import SimpleConnectionPool
+#from contextlib import contextmanager
 
 import collections, datetime, unicodecsv as csv, getpass
 import sys, json, os, pprint, hashlib, traceback, ctypes, platform
@@ -112,7 +112,7 @@ def is_registered(chromosome):
 
 postgresHost = getpass._raw_input("PostgreSQL Host:\n")
 postgresUser = getpass._raw_input("PostgreSQL Username:\n")
-postgresConnHandle = pgdb.connect(database='postgres', user=postgresUser,password='',host=postgresHost)
+postgresConnHandle = psycopg2.connect(database='postgres', user=postgresUser,password='',host=postgresHost)
 
 client = MongoClient(getpass._raw_input("MongoDB Production Host:\n"))
 mongodbHandle = client["admin"]
