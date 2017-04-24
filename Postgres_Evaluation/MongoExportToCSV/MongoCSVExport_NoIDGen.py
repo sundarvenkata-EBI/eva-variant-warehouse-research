@@ -174,7 +174,7 @@ for doc in chromosome_LB_UB_Map:
             sampleDocs = list(srcCollHandle.find(query, no_cursor_timeout=True))
             numRecs = len(sampleDocs)
             if sampleDocs:
-                print("Processing batch:{0} with {1} records".format(str(batchNumber), str(numRecs)))
+                print("Processing batch:{0} for chromosome {1} with {2} records".format(str(batchNumber), chromosome, str(numRecs)))
                 if numRecs <= smallestChunkSize:
                     insertDocs(sampleDocs, str(batchNumber) + "_0")
                 else:
