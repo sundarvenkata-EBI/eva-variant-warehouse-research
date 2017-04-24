@@ -181,7 +181,7 @@ for doc in chromosome_LB_UB_Map:
                     insertDocs(sampleDocs, str(batchNumber) + "_0")
                 else:
                     processList = [Process(target=insertDocs, args=(
-                    sampleDocs[i:i + (numRecs / numProcessors)], chromosome + str(batchNumber) + "_" + str(i))) for i in
+                    sampleDocs[i:i + (numRecs / numProcessors)], chromosome + "_" + str(batchNumber) + "_" + str(i))) for i in
                                    range(0, numRecs, (numRecs / numProcessors))]
                     for process in processList:
                         process.start()
