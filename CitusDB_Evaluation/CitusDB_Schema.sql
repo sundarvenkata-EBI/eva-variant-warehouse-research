@@ -39,7 +39,7 @@ so INTEGER[]
 
 create TABLE public_1.variant
 (
-VAR_ID TEXT,
+VAR_ID CHAR(30),
 CHROM CHAR(10),
 START_POS BIGINT,
 END_POS BIGINT,
@@ -106,6 +106,17 @@ drop table public_1.hgv_grp;
 drop table public_1.file_grp;
 drop table public_1.variant_sample_attrs;
 
+drop TABLE public_1.dummy;
+create TABLE public_1.dummy(textval text);
+insert into public_1.dummy values ('X_010_020');
+insert into public_1.dummy values ('X_010_015');
+insert into public_1.dummy values ('X_120_013');
+insert into public_1.dummy values ('X_601_413');
+select * from public_1.dummy order by textval;
+
+create TABLE public_1.dummy(textval text);
+
+select max(textval) from public_1.dummy 
 
 insert into variant (VAR_ID, annot_ref) values ('some', ROW('6bb4a312fa295016d2c4feb89a360e46'))
 
