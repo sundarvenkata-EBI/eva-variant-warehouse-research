@@ -104,7 +104,8 @@ def get_tot_allowed_recs():
     return int(((get_free_space_mb(".")*0.60)/4500))*1e6
 
 def is_registered(chromosome):
-    resultCursor = postgresConnHandle.execute("select * from public_1.reg_chrom where chrom = '{0}'".format(chromosome))
+    resultCursor = postgresConnHandle.cursor()
+    resultCursor.execute("select * from public_1.reg_chrom where chrom = '{0}'".format(chromosome))
     if resultCursor.rowcount > 0:
         return True
     return False
@@ -112,7 +113,7 @@ def is_registered(chromosome):
 
 postgresHost = getpass._raw_input("PostgreSQL Host:\n")
 postgresUser = getpass._raw_input("PostgreSQL Username:\n")
-postgresConnHandle = psycopg2.connect(database='postgres', user=postgresUser,password='',host=postgresHost)
+postgresConnHandle = psycopg2.connect("dbname='postgres' user='{0}' host='{1}' password=''".format(postgresUser, postgresHost))
 
 client = MongoClient(getpass._raw_input("MongoDB Production Host:\n"))
 mongodbHandle = client["admin"]
