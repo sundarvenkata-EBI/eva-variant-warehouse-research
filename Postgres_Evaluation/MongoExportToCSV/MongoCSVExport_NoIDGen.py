@@ -32,7 +32,7 @@ def insertDocs(sampleDocs, batchNumber):
         variantFileCSVWriter = csv.writer(variantFileCSVHandle, delimiter='\t', quotechar='"',
                                           quoting=csv.QUOTE_MINIMAL)
         for sampleDoc in sampleDocs:
-            documentId = sampleDoc["chr"] + "_" + str(sampleDoc["start"]).zfill(12) + "_" + str(sampleDoc["end"]).zfill(12)
+            documentId = sampleDoc["chr"] + "_" + str(sampleDoc["start"]).zfill(12) + "_" + str(sampleDoc["end"]).zfill(12) + "_" + sampleDoc["type"]
             try:
                 for doc in getDictValueOrNull(sampleDoc, "hgvs"):
                     hgvCSVWriter.writerow(

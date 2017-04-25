@@ -25,7 +25,7 @@ fm VARCHAR(10)
 
 create TABLE public_1.CT
 (
-VAR_ID TEXT,
+VAR_ID CHAR(30),
 CT_INDEX SMALLINT,
 gn TEXT,
 ensg VARCHAR(30),
@@ -33,9 +33,10 @@ enst VARCHAR(30),
 codon TEXT,
 strand VARCHAR(30),
 bt TEXT,
-aaChange VARCHAR(30),
+aaChange TEXT,
 so INTEGER[]
 );
+SELECT create_distributed_table('public_1.ct', 'var_id', 'append');
 
 create TABLE public_1.variant
 (
@@ -48,7 +49,8 @@ VAR_LEN SMALLINT,
 VAR_REF TEXT,
 VAR_ALT TEXT
 );
-
+SELECT create_distributed_table('public_1.variant', 'var_id', 'append');
+SET citus.shard_max_size TO '30720MB';
 
 create TABLE public_1.HGV
 (
@@ -68,7 +70,19 @@ select * from public_1.src_file;
 select * from public_1.file_grp;
 select * from public_1.variant_sample_attrs;
 
+SELECT *
+  FROM pg_dist_shard_placement
+ WHERE shardid = (
+   SELECT get_shard_id_for_distribution_column('public_1.variant', '1_000227471340_000227471340')
+ );
+SELECT pg_size_pretty(citus_table_size('public_1.ct'));
+SELECT pg_size_pretty(citus_table_size('public_1.variant'));
+select chrom from public_1.variant group by 1;
+select chrom from public_1.ct group by 1;
+explain select * from public_1.variant where var_id = '21_000048119868_000048119868';
+explain select * from public_1.ct where var_id = '21_000048119868_000048119868';
 select count(*) from public_1.variant;
+select count(*) from public_1.ct;
 select count(*) from public_1.variant where CHROM = 'X';
 db.variant_chr21_1_1.find({"chr": "21", "start": 9411413, "ref": "T"});
 select count(*) from public_1.hgv;
@@ -83,6 +97,7 @@ select version();
 set random_page_cost to 100;
 set random_page_cost to 4;
 show random_page_cost;
+show citus.shard_max_size;
 show seq_page_cost;
 explain select * from public_1.variant where chrom = '3' and start_pos >= 11919 and end_pos <= 60263869 limit 100;
 select * from public_1.variant where character_length(var_id) > 50;
@@ -90,6 +105,7 @@ select var_id from public_1.variant group by 1 having count(*) > 1;
 select var_id, genotype, rng_start, rng_end from public_1.variant_sample_attrs where rng_start is not null group by 1,2,3,4 having count(*) > 1;
 select var_id, genotype, norng_index from public_1.variant_sample_attrs where norng_index is not null group by 1,2,3 having count(*) > 1;
 select * from public_1.stage_1 where so[1] = 1792;
+select master_modify_multiple_shards('delete from public_1.variant where chrom = ''21''');
 
 delete from public_1.src_file;
 delete from public_1.ct;
@@ -112,9 +128,13 @@ insert into public_1.dummy values ('X_010_020');
 insert into public_1.dummy values ('X_010_015');
 insert into public_1.dummy values ('X_120_013');
 insert into public_1.dummy values ('X_601_413');
+commit;
 select * from public_1.dummy order by textval;
 
-create TABLE public_1.dummy(textval text);
+create TABLE public_1.reg_chrom(chrom text, host text);
+insert into public_1.reg_chrom values ('1', 'citusmaster.windows.ebi.ac.uk');
+select * from public_1.reg_chrom ;
+delete from public_1.reg_chrom ;
 
 select max(textval) from public_1.dummy 
 
@@ -132,3 +152,25 @@ from public_1.
     inner join ct on ct.ct_id = ct_grp.ct_id
     
 (select ct_id from public_1.ct_grp where ct_grp_id in (select (annot_ref).ct_grp_id from public_1.variant ));
+
+CREATE OR REPLACE FUNCTION citus_table_size(table_name regclass)
+RETURNS bigint LANGUAGE plpgsql
+AS $function$
+DECLARE
+        table_size bigint;
+BEGIN
+        PERFORM master_update_shard_statistics(shardid)
+        FROM pg_dist_shard
+        WHERE logicalrelid = table_name;
+
+        SELECT sum(shard_size) INTO table_size
+        FROM (
+                SELECT max(shardlength) AS shard_size
+                FROM pg_dist_shard JOIN pg_dist_shard_placement USING (shardid)
+                WHERE logicalrelid = table_name AND shardstate = 1
+                GROUP BY shardid
+        ) shard_sizes;
+
+        RETURN table_size;
+END;
+$function$;
