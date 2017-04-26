@@ -124,6 +124,8 @@ drop table public_1.variant_sample_attrs;
 
 drop TABLE public_1.dummy;
 create TABLE public_1.dummy(textval text);
+create TABLE public_1.dummy2(intarr INTEGER []);
+select * from public_1.dummy2;
 insert into public_1.dummy values ('X_010_020');
 insert into public_1.dummy values ('X_010_015');
 insert into public_1.dummy values ('X_120_013');
@@ -143,6 +145,9 @@ insert into variant (VAR_ID, annot_ref) values ('some', ROW('6bb4a312fa295016d2c
 delete from public_1.variant where VAR_ID = 'some';
 
 select * from public_1.ANNOT_OBJ;
+select * from public_1.ct where VAR_ID like '1_0002122%';
+select master_modify_multiple_shards('delete from public_1.ct where VAR_ID like ''1_0002122%''');
+CREATE INDEX chrom_idx ON public_1.variant USING HASH (chrom);
 
 select 
 ct.* 

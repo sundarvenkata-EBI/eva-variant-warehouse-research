@@ -8,6 +8,7 @@ import multiprocessing, psycopg2, socket
 from multiprocessing import Process, Pipe
 #from psycopg2.pool import SimpleConnectionPool
 #from contextlib import contextmanager
+from optparse import OptionParser
 
 import collections, datetime, unicodecsv as csv, getpass
 import sys, json, os, pprint, hashlib, traceback, ctypes, platform
@@ -61,6 +62,8 @@ def insertDocs(sampleDocs, batchNumber):
                         soArray = getDictValueOrNull(ctDoc, "so")
                         if soArray:
                             soArray =  "{" + ",".join([str(x) for x in soArray]) + "}"
+                        else:
+                            soArray = "{}"
                         ctFileCSVWriter.writerow(
                             [documentId, ctIndex, getDictValueOrNull(ctDoc, "gn"), getDictValueOrNull(ctDoc, "ensg"),
                              getDictValueOrNull(ctDoc, "enst"),
@@ -110,6 +113,10 @@ def is_registered(chromosome):
         return True
     return False
 
+parser = OptionParser()
+parser.add_option("-l", "--recordlimit", dest="recordLimit",
+                  help="Record limit")
+(options, args) = parser.parse_args()
 
 postgresHost = getpass._raw_input("PostgreSQL Host:\n")
 postgresUser = getpass._raw_input("PostgreSQL Username:\n")
@@ -158,8 +165,11 @@ for doc in chromosome_LB_UB_Map:
     if is_registered(chromosome):
         continue
     else:
-        numRecordsToMigrate = doc["numEntries"]
-        if (totNumRecordsProcessed + numRecordsToMigrate) > totalAllowedRecords: continue
+        if options.recordLimit:
+            numRecordsToMigrate = options.recordLimit
+        else:
+            numRecordsToMigrate = doc["numEntries"]
+        if ((totNumRecordsProcessed + numRecordsToMigrate) > totalAllowedRecords): continue
         dmlCursor = postgresConnHandle.cursor()
         dmlCursor.execute("insert into public_1.reg_chrom values ('{0}','{1}')".format(chromosome, socket.getfqdn()))
         postgresConnHandle.commit()
