@@ -40,7 +40,7 @@ SELECT create_distributed_table('public_1.ct', 'var_id', 'append');
 
 create TABLE public_1.variant
 (
-VAR_ID CHAR(30),
+VAR_ID CHAR(70),
 CHROM CHAR(10),
 START_POS BIGINT,
 END_POS BIGINT,
@@ -101,7 +101,21 @@ show citus.shard_max_size;
 show seq_page_cost;
 explain select * from public_1.variant where chrom = '3' and start_pos >= 11919 and end_pos <= 60263869 limit 100;
 select * from public_1.variant where character_length(var_id) > 50;
-select var_id from public_1.variant group by 1 having count(*) > 1;
+select chrom, count(*) from public_1.variant  group by 1;
+explain 
+select cast(VAR_ID || '_' || VAR_TYPE as VARCHAR(50)) as VAR_ID_MOD
+from public_1.variant where VAR_ID in 
+('21_000022954584_000022954584',
+'21_000040823941_000040823941',
+'21_000021353996_000021353999',
+'21_000047350070_000047350070',
+'21_000038877736_000038877736'
+) a
+inner join public_1.variant b on b.VAR_ID = a.var_id
+group by 1;
+
+select * from public_1.variant where VAR_ID = '21_000021353996_000021353999';
+
 select var_id, genotype, rng_start, rng_end from public_1.variant_sample_attrs where rng_start is not null group by 1,2,3,4 having count(*) > 1;
 select var_id, genotype, norng_index from public_1.variant_sample_attrs where norng_index is not null group by 1,2,3 having count(*) > 1;
 select * from public_1.stage_1 where so[1] = 1792;
@@ -147,7 +161,16 @@ delete from public_1.variant where VAR_ID = 'some';
 select * from public_1.ANNOT_OBJ;
 select * from public_1.ct where VAR_ID like '1_0002122%';
 select master_modify_multiple_shards('delete from public_1.ct where VAR_ID like ''1_0002122%''');
-CREATE INDEX chrom_idx ON public_1.variant USING HASH (chrom);
+CREATE INDEX chrom_idx_b ON public_1.variant USING BTREE (chrom);
+CREATE INDEX start_idx_b ON public_1.variant USING BTREE (start_pos);
+CREATE INDEX end_idx_b ON public_1.variant USING BTREE (end_pos);
+CREATE INDEX var_id_idx_b ON public_1.variant USING BTREE (VAR_ID);
+
+CREATE INDEX var_id_idx_ct_b ON public_1.ct USING BTREE (VAR_ID);
+select master_modify_multiple_shards('drop index public_1.chrom_idx_b');
+explain select * from public_1.variant where chrom = '19' limit 100;
+
+explain select * from public_1.variant where chrom = '2' and start_pos >= 47000000 and start_pos <= 49000000 and end_pos >= 48000000 and end_pos <= 50000000 and var_ref = 'T' order by chrom limit 1000;
 
 select 
 ct.* 
@@ -179,3 +202,18 @@ BEGIN
         RETURN table_size;
 END;
 $function$;
+
+explain
+select 
+* 
+from 
+public_1.variant a
+inner join public_1.ct b on a.VAR_ID = b.VAR_ID
+where
+a.chrom = '2' and a.START_POS >= 48000000 and a.START_POS <= 49000000
+limit 100;
+
+select 
+array_agg(
+from 
+public_1.variant where CHROM = '1' and START_POS between 227471340 and 227471435;

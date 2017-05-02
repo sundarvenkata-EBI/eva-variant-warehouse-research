@@ -22,17 +22,37 @@ mongoProdCollHandle = mongoProdDBHandle["variants_1_1"]
 mongoProdCollHandle_2 = mongoProdDBHandle["variants_1_2"]
 
 numRuns = 30
-minChromPos= 50000000
+minChromPos= 60000
 maxChromPos = 100000000
 cumulativeExecTime = 0
 margin = 1000000
+print("Start Time:{0}".format(datetime.datetime.now()))
 for i in range(0, numRuns):
     pos = random.randint(minChromPos, maxChromPos)
-    startTime = datetime.datetime.now()
     # Return all samples with homozygous reference for allele X at position X on chromosome X
-    resultList = list(mongoProdCollHandle_2.find({"chr":"15", "ref": "T","start": {"$gt": pos - margin},"start": {"$lte": pos + margin}, "end": {"$gte": pos}, "end": {"$lt": pos + margin + margin}, "files.samp.0|0": {"$exists": "true"}}).sort([("chr", pymongo.ASCENDING), ("start", pymongo.ASCENDING)]).limit(1000))
-    endTime = datetime.datetime.now()
-    cumulativeExecTime += ((endTime - startTime).total_seconds())
+    # resultList = list(mongoDevDBHandle["variant_chr21_1_1_sample_mod"].find({"$and":[{"chr":"X"},{"start": {"$gt": pos - margin}},{"start": {"$lte": pos + margin}}, {"end": {"$gte": pos}}, {"end": {"$lt": pos + margin + margin}},
+    #                                                       {"files":
+    #                                                            {"$elemMatch":
+    #                                                                 {"samp.phased": {"$elemMatch": {"gt": "1|1"}}}}}
+    #                                                       ]}, {"files.samp.phased.$.si":1}).sort([("chr", pymongo.ASCENDING), ("start", pymongo.ASCENDING)]).limit(1000))
+    # Proxy Query
+    step = 20000
+    startFirstPos = pos - margin
+    startLastPos = pos + margin
+    endFirstPos = pos
+    endLastPos = pos + margin + margin
+    while(True):
+        startTime = datetime.datetime.now()
+        resultList = list(mongoProdCollHandle_2.find({"$and":[{"chr":"X"},{"start": {"$gt": startFirstPos}},{"start": {"$lte": startFirstPos + step}}, {"end": {"$gte": endFirstPos}}, {"end": {"$lt": endFirstPos + step}},
+                                                          {"files.samp.def": "1|1"}
+                                                          ]}).sort([("chr", pymongo.ASCENDING), ("start", pymongo.ASCENDING)]))
+        startFirstPos += step
+        endFirstPos += step
+        endTime = datetime.datetime.now()
+        duration = (endTime - startTime).total_seconds()
+        cumulativeExecTime += duration
+        print("Returned {0} records in {1} seconds".format(len(resultList), duration))
+
 print("Average Execution time:{0}".format(cumulativeExecTime/numRuns))
 
 numRuns = 30
