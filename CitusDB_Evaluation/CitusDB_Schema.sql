@@ -203,17 +203,34 @@ BEGIN
 END;
 $function$;
 
+
 explain
 select 
-* 
+a.VAR_ID,
+array_agg(('ct_index',b.ct_index,'gn',b.gn,'ensg', b.ensg, 'so',b.so))
 from 
 public_1.variant a
 inner join public_1.ct b on a.VAR_ID = b.VAR_ID
 where
-a.chrom = '2' and a.START_POS >= 48000000 and a.START_POS <= 49000000
+a.chrom = '3' and a.START_POS >= 48000000 and a.START_POS <= 49000000
+group by 1
+limit 100;
+
+explain
+select 
+a.VAR_ID,
+array_agg(row_to_json((b.ct_index,b.gn,b.ensg,b.so)))
+from 
+public_1.variant a
+inner join public_1.ct b on a.VAR_ID = b.VAR_ID
+where
+a.chrom = '3' and a.START_POS >= 48000000 and a.START_POS <= 49000000
+group by 1
 limit 100;
 
 select 
-array_agg(
+VAR_ID, array_agg(CT_INDEX)
 from 
-public_1.variant where CHROM = '1' and START_POS between 227471340 and 227471435;
+public_1.ct where VAR_ID like '3_00004817%' group by 1;
+
+select SUBSTR(VAR_ID, 1,1) from public_1.ct group by 1;

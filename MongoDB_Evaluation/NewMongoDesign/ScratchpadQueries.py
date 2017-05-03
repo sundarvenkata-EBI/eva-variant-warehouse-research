@@ -36,22 +36,26 @@ for i in range(0, numRuns):
     #                                                                 {"samp.phased": {"$elemMatch": {"gt": "1|1"}}}}}
     #                                                       ]}, {"files.samp.phased.$.si":1}).sort([("chr", pymongo.ASCENDING), ("start", pymongo.ASCENDING)]).limit(1000))
     # Proxy Query
-    step = 20000
+    step = 200000
     startFirstPos = pos - margin
     startLastPos = pos + margin
     endFirstPos = pos
     endLastPos = pos + margin + margin
     while(True):
         startTime = datetime.datetime.now()
-        resultList = list(mongoProdCollHandle_2.find({"$and":[{"chr":"X"},{"start": {"$gt": startFirstPos}},{"start": {"$lte": startFirstPos + step}}, {"end": {"$gte": endFirstPos}}, {"end": {"$lt": endFirstPos + step}},
-                                                          {"files.samp.def": "1|1"}
-                                                          ]}).sort([("chr", pymongo.ASCENDING), ("start", pymongo.ASCENDING)]))
+        query = {"$and":[{"chr":"X"},{"start": {"$gt": startFirstPos}},{"start": {"$lte": startFirstPos + step}},{"end": {"$gt": startFirstPos}}, {"end": {"$lte": endLastPos}},
+                                                          {"files.samp.def": "0|0"}
+                                                          ]}
+        #print(query)
+        #raw_input()
+        resultList = list(mongoProdCollHandle_2.find(query).sort([("chr", pymongo.ASCENDING), ("start", pymongo.ASCENDING)]))
         startFirstPos += step
         endFirstPos += step
         endTime = datetime.datetime.now()
         duration = (endTime - startTime).total_seconds()
         cumulativeExecTime += duration
         print("Returned {0} records in {1} seconds".format(len(resultList), duration))
+        if (startFirstPos >= startLastPos) or (endFirstPos >= endLastPos): break
 
 print("Average Execution time:{0}".format(cumulativeExecTime/numRuns))
 
