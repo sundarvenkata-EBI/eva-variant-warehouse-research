@@ -43,9 +43,7 @@ for i in range(0, numRuns):
     endLastPos = pos + margin + margin
     while(True):
         startTime = datetime.datetime.now()
-        query = {"$and":[{"chr":"X"},{"start": {"$gt": startFirstPos}},{"start": {"$lte": startFirstPos + step}},{"end": {"$gt": startFirstPos}}, {"end": {"$lte": endLastPos}},
-                                                          {"files.samp.def": "0|0"}
-                                                          ]}
+        query = {"chr":"1","start": {"$gt": startFirstPos, "$lte": startFirstPos + step}, "end": {"$gt": startFirstPos, "$lte": endLastPos}, "files.samp.def": "0|0"}
         #print(query)
         #raw_input()
         resultList = list(mongoProdCollHandle_2.find(query).sort([("chr", pymongo.ASCENDING), ("start", pymongo.ASCENDING)]))

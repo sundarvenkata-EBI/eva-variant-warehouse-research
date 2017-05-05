@@ -51,8 +51,8 @@ for i in range(0, numRuns):
         print("Citus: Returned {0} records in {1} seconds".format(len(resultList), duration))
 
         startTime = datetime.datetime.now()
-        query = {"$and":[{"chr": chromosome},{"start": {"$gt": startFirstPos}},{"start": {"$lte": startFirstPos + step}},{"end": {"$gte": startFirstPos}},
-                         {"end": {"$lt": endLastPos}}]}
+        query = {"chr": chromosome, "start": {"$gt": startFirstPos, "$lte": startFirstPos + step},
+                 "end": {"$gte": startFirstPos, "$lt": endLastPos}}
         resultList = list(mongoProdCollHandle_2.find(query, {"_id":1, "chr": 1, "start": 1, "end" : 1, "type": 1, "len": 1, "ref": 1, "alt": 1}).sort([("chr", pymongo.ASCENDING), ("start", pymongo.ASCENDING)]))
         startFirstPos += step
         endFirstPos += step
@@ -96,8 +96,7 @@ for i in range(0, numRuns):
     print("Citus: Returned {0} records in {1} seconds".format(len(resultList), duration))
 
     startTime = datetime.datetime.now()
-    query = {"$and":[{"chr": chromosome},{"start": {"$gt": startFirstPos}},{"start": {"$lte": startLastPos}},{"end": {"$gte": endFirstPos}},
-                     {"end": {"$lt": endLastPos}}]}
+    query = {"chr": chromosome, "start": {"$gt": startFirstPos, "$lte": startLastPos},"end": {"$gte": endFirstPos, "$lt": endLastPos}}
     resultList = list(mongoProdCollHandle_2.find(query, {"_id":1, "chr": 1, "start": 1, "end" : 1, "type": 1, "len": 1, "ref": 1, "alt": 1}).sort([("chr", pymongo.ASCENDING), ("start", pymongo.ASCENDING)]))
     startFirstPos += step
     endFirstPos += step
