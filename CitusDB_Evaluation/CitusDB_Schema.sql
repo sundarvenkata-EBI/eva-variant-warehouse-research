@@ -234,3 +234,7 @@ from
 public_1.ct where VAR_ID like '3_00004817%' group by 1;
 
 select SUBSTR(VAR_ID, 1,1) from public_1.ct group by 1;
+
+select * from public_1.variant where chrom = '22' limit 100;
+
+select * from public_1.ct where VAR_ID like '22_000036051%' limit 100;
