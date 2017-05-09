@@ -12,6 +12,8 @@ delete from public.ws_traffic ;
 select count(*) from public.kibana_ws_logs;
 select count(*) from public.ws_traffic ;
 
+CREATE INDEX ws_traffic_ts_idx ON public.ws_traffic (event_ts);
+
 drop view public.ws_traffic_useful_cols;
 create or replace view public.ws_traffic_useful_cols as (
 select event_ts, client, bytes_out, user_agent, duration, request_uri_path, request_query, seg_len, http_status from public.ws_traffic);
@@ -34,6 +36,9 @@ select request_type, count(*) from public.ws_traffic group by 1;
 select is_https, count(*) from public.ws_traffic group by 1;
 select request_uri_path from public.ws_traffic group by 1;
 
+select request_uri_path
+select * from public.ws_traffic where request_uri_path like '%/segments/%' order by duration desc;
+select * from public.ws_traffic where request_query like '%histogram=%' order by duration desc;
 select * from public.ws_traffic_useful_cols where request_uri_path like '%/segments/%' order by event_ts;
 select * from public.ws_traffic_useful_cols where user_agent like '%WormBase%' and request_uri_path like '%/segments/%' order by seg_len desc;
 
@@ -47,4 +52,19 @@ AS $$
 return (1, 2, 3, 4, 5)
 $$ LANGUAGE plpythonu;
 
-select * from public.ws_traffic_useful_cols where request_uri_path like '%/segments/%' and http_status not in ('400','404') order by seg_len desc;
+select a.*,(case when a.request_query like '%exclude=sourceEntries%' then 1 else 0 end) as SRC_EXCL from public.ws_traffic_useful_cols a where request_uri_path like '%/segments/%' and http_status not in ('400','404') order by seg_len desc;
+
+select (case when a.request_query like '%exclude=sourceEntries%' then 1 else 0 end) as SRC_EXCL, count(*) from public.ws_traffic_useful_cols a where request_uri_path like '%/segments/%' and http_status not in ('400','404') group by 1;
+
+select * from public.ws_traffic_useful_cols where request_uri_path like '%/segments/%' and http_status not in ('400','404') 
+	and request_query not like '%exclude=sourceEntries%' order by event_ts;
+
+select * from (select substr(cast(event_ts as text), 1, 13) as traffic_hour, count(*) as hits  from public.ws_traffic_useful_cols group by 1) a order by hits desc;
+select * from (select substr(cast(event_ts as text), 1, 16) as traffic_hour, count(*) as hits  from public.ws_traffic_useful_cols group by 1) a order by hits desc;
+select * from (select substr(cast(event_ts as text), 1, 16) as traffic_hour, count(distinct client) as hits  from public.ws_traffic_useful_cols 
+	where request_uri_path like '%/segments/%' and http_status not in ('400','404') group by 1) a order by hits desc;
+
+select * from public.ws_traffic_useful_cols where cast(event_ts as text) like '2017-05-03 09:05%';'?merge=true&exclude=sourceEntries&_dc=1493720679597&species=hsapiens_grch37&page=1&skip=0&limit=10'
+select * from public.ws_traffic_useful_cols where cast(event_ts as text) like '2017-05-04 15:14%' and request_uri_path like '%/segments/%';
+select * from public.ws_traffic_useful_cols where cast(event_ts as text) like '2017-05-02 11:24%' and request_uri_path like '%/segments/%';
+
