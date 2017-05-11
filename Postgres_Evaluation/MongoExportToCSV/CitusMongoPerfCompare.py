@@ -149,3 +149,5 @@ for i in range(0, numRuns):
     print("****************")
 print("Average Citus Execution time:{0}".format(citusCumulativeExecTime/numRuns))
 print("Average Mongo Execution time:{0}".format(mongoCumulativeExecTime/numRuns))
+
+postgresConnHandle.close()

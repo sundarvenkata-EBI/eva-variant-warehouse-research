@@ -10,6 +10,7 @@ from multiprocessing import Process, Pipe
 #from contextlib import contextmanager
 from optparse import OptionParser
 
+import bitarray
 import collections, datetime, unicodecsv as csv, getpass
 import sys, json, os, pprint, hashlib, traceback, ctypes, platform
 
@@ -18,79 +19,163 @@ def getDictValueOrNull(dict, key):
         return dict[key]
     return None
 
+def getGTBitArray(arr,size):
+    resultBitArray = bitarray.bitarray(size)
+    resultBitArray.setall(False)
+    for elem in arr:
+        resultBitArray[elem] = True
+    return resultBitArray
 
-def insertDocs(sampleDocs, batchNumber):
-    if sampleDocs:
-        hgvCSVHandle = open('hgv_{0}.csv'.format(batchNumber), 'wb')
-        hgvCSVWriter = csv.writer(hgvCSVHandle, delimiter='\t', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-        sampleAttrCSVHandle = open('sampleAttr_{0}.csv'.format(batchNumber), 'wb')
-        sampleAttrCSVWriter = csv.writer(sampleAttrCSVHandle, delimiter='\t', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-        srcFileCSVHandle = open('srcFile_{0}.csv'.format(batchNumber), 'wb')
-        srcFileCSVWriter = csv.writer(srcFileCSVHandle, delimiter='\t', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-        ctFileCSVHandle = open('ctFile_{0}.csv'.format(batchNumber), 'wb')
-        ctFileCSVWriter = csv.writer(ctFileCSVHandle, delimiter='\t', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-        variantFileCSVHandle = open('variantFile_{0}.csv'.format(batchNumber), 'wb')
-        variantFileCSVWriter = csv.writer(variantFileCSVHandle, delimiter='\t', quotechar='"',
+def insertDocs(variantDocs, batchNumber):
+    if variantDocs:
+
+        threadLocalMongoClient = MongoClient(mongoHost)
+        threadLocalMongoClient["admin"].authenticate(mongoUser, mongoPass)
+        filesCollHandle = threadLocalMongoClient["eva_hsapiens_grch37"]["files_1_2"]
+
+        #region Initialize CSV file handles and writers
+        variantCSVHandle = open('variant_{0}.csv'.format(batchNumber), 'wb')
+        variantCSVWriter = csv.writer(variantCSVHandle, delimiter='\t', quotechar='"',
                                           quoting=csv.QUOTE_MINIMAL)
-        for sampleDoc in sampleDocs:
-            documentId = sampleDoc["chr"] + "_" + str(sampleDoc["start"]).zfill(12) + "_" + str(sampleDoc["end"]).zfill(12) + "_" + hashlib.md5(sampleDoc["ref"] + "_" + sampleDoc["alt"]).hexdigest()
+        filesCSVHandle = open('files_{0}.csv'.format(batchNumber), 'wb')
+        filesCSVWriter = csv.writer(filesCSVHandle, delimiter='\t', quotechar='"',
+                                      quoting=csv.QUOTE_MINIMAL)
+        samplesCSVHandle = open('samples_{0}.csv'.format(batchNumber), 'wb')
+        samplesCSVWriter = csv.writer(samplesCSVHandle, delimiter='\t', quotechar='"',
+                                    quoting=csv.QUOTE_MINIMAL)
+        annotCSVHandle = open('ctFile_{0}.csv'.format(batchNumber), 'wb')
+        annotCSVWriter = csv.writer(annotCSVHandle, delimiter='\t', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+        #endregion
+
+        for variantDoc in variantDocs:
+            variantID = variantDoc["chr"] + "_" + str(variantDoc["start"]).zfill(12) + "_" + str(variantDoc["end"]).zfill(12) + "_" + hashlib.md5(variantDoc["ref"] + "_" + variantDoc["alt"]).hexdigest()
             try:
-                for doc in getDictValueOrNull(sampleDoc, "hgvs"):
-                    hgvCSVWriter.writerow(
-                        [documentId, getDictValueOrNull(doc, "type"), getDictValueOrNull(doc, "name")])
                 sampleIndex = 0
-                for doc in getDictValueOrNull(sampleDoc, "files"):
+                defaultGenotype = None
+                for doc in getDictValueOrNull(variantDoc, "files"):
+                    fid = getDictValueOrNull(doc, "fid")
+                    sid = getDictValueOrNull(doc, "sid")
+                    defaultGenotypeSampleSet = set()
+                    numSamp = None
+                    if fid and sid:
+                        fileSampDoc = filesCollHandle.find_one({"fid": fid, "sid": sid, "st.nSamp": {"$exists": "true"}})
+                        threadLocalMongoClient.close()
+                        if fileSampDoc:
+                            print("Obtained number of samples")
+                            numSamp = fileSampDoc["st"]["nSamp"]
+                            defaultGenotypeSampleSet = set(fileSampDoc["samp"].values())
                     sampDoc = getDictValueOrNull(doc, "samp")
                     if sampDoc:
                         for genotype in sampDoc.keys():
                             if genotype == "def":
-                                sampleAttrCSVWriter.writerow(
-                                    [documentId, sampleIndex, sampDoc[genotype], None, None, None, 1])
+                                defaultGenotype = sampDoc[genotype]
                             else:
-                                for elem in sampDoc[genotype]:
-                                    sampleAttrCSVWriter.writerow(
-                                        [documentId, sampleIndex, genotype, None, None, elem, None])
-                        srcFileCSVWriter.writerow(
-                            [documentId, sampleIndex, getDictValueOrNull(doc, "fid"), getDictValueOrNull(doc, "sid"),
-                             getDictValueOrNull(doc, "fm")])
+                                sampleIndexSet = set(sampDoc[genotype])
+                                defaultGenotypeSampleSet = defaultGenotypeSampleSet - sampleIndexSet
+                                gtBitArray = None
+                                if numSamp:
+                                    gtBitArray = getGTBitArray(sampleIndexSet, numSamp)
+                                samplesCSVWriter.writerow(
+                                    [variantID, sampleIndex, genotype, numSamp, gtBitArray.to01()])
+                        samplesCSVWriter.writerow(
+                            [variantID, sampleIndex, defaultGenotype, numSamp, getGTBitArray(defaultGenotypeSampleSet, numSamp).to01()])
+
+                        attrs = getDictValueOrNull(doc, "attrs")
+                        if attrs: attrs = json.dumps(attrs, ensure_ascii=False)
+                        filesCSVWriter.writerow(
+                            [variantID, sampleIndex, getDictValueOrNull(doc, "fid"), getDictValueOrNull(doc, "sid"),
+                             attrs, getDictValueOrNull(doc, "fm")])
                     sampleIndex += 1
 
-                annotDoc = getDictValueOrNull(sampleDoc, "annot")
+                annotDoc = getDictValueOrNull(variantDoc, "annot")
+                overallSOArray = []
+                minSiftScore = None
+                maxSiftScore = None
+                minPphenScore = None
+                maxPphenScore = None
+                overallXrefArray = []
                 if annotDoc:
                     ctIndex = 0
+
                     for ctDoc in annotDoc["ct"]:
                         soArray = getDictValueOrNull(ctDoc, "so")
                         if soArray:
+                            overallSOArray.extend(soArray)
                             soArray =  "{" + ",".join([str(x) for x in soArray]) + "}"
                         else:
                             soArray = "{}"
-                        ctFileCSVWriter.writerow(
-                            [documentId, ctIndex, getDictValueOrNull(ctDoc, "gn"), getDictValueOrNull(ctDoc, "ensg"),
+
+                        xrefArray = getDictValueOrNull(ctDoc, "xrefs")
+                        if xrefArray: overallXrefArray.extend([x["id"] for x in xrefArray])
+
+                        siftDoc = getDictValueOrNull(ctDoc, "sift")
+                        pphenDoc = getDictValueOrNull(ctDoc, "polyphen")
+                        siftScore = None
+                        pphenScore = None
+                        siftDesc = None
+                        pphenDesc = None
+                        if siftDoc:
+                            siftScore = siftDoc["sc"]
+                            minSiftScore = min(siftScore, minSiftScore)
+                            maxSiftScore = max(siftScore, maxSiftScore)
+                        if pphenDoc:
+                            pphenScore = pphenDoc["sc"]
+                            minPphenScore = min(pphenScore, minPphenScore)
+                            maxPphenScore = max(pphenScore, maxPphenScore)
+                        annotCSVWriter.writerow(
+                            [variantID, ctIndex, getDictValueOrNull(ctDoc, "gn"), getDictValueOrNull(ctDoc, "ensg"),
                              getDictValueOrNull(ctDoc, "enst"),
                              getDictValueOrNull(ctDoc, "codon"), getDictValueOrNull(ctDoc, "strand"),
                              getDictValueOrNull(ctDoc, "bt"), getDictValueOrNull(ctDoc, "aaChange"),
-                             soArray])
+                             soArray, siftScore, siftDesc, pphenScore, pphenDesc])
                         ctIndex += 1
 
+                idArray = getDictValueOrNull(variantDoc, "ids")
+                if idArray:
+                    idArray = "{" + ",".join([x for x in idArray]) + "}"
+                else:
+                    idArray = "{}"
 
-                variantFileCSVWriter.writerow([documentId, getDictValueOrNull(sampleDoc, "chr"),
-                                               getDictValueOrNull(sampleDoc, "start"),
-                                               getDictValueOrNull(sampleDoc, "end"),
-                                               getDictValueOrNull(sampleDoc, "type"),
-                                               getDictValueOrNull(sampleDoc, "len"),
-                                               getDictValueOrNull(sampleDoc, "ref"),
-                                               getDictValueOrNull(sampleDoc, "alt")
+                hgvArray = getDictValueOrNull(variantDoc, "hgvs")
+                if hgvArray:
+                    hgvArray = "ARRAY[" + ",".join(["row(" + "'" + x["type"] + "'" + "," + "'" + x["name"] + "'" + ")::public_1.hgv"  for x in hgvArray]) + "]"
+                else:
+                    hgvArray = "{}"
+
+                if overallSOArray:
+                    overallSOArray = "{" + ",".join([str(x) for x in overallSOArray]) + "}"
+                else:
+                    overallSOArray = "{}"
+
+                if overallXrefArray:
+                    overallXrefArray = "{" + ",".join([x for x in overallXrefArray]) + "}"
+                else:
+                    overallXrefArray = "{}"
+                variantCSVWriter.writerow([variantID, getDictValueOrNull(variantDoc, "chr"),
+                                               getDictValueOrNull(variantDoc, "start"),
+                                               getDictValueOrNull(variantDoc, "end"),
+                                               getDictValueOrNull(variantDoc, "len"),
+                                               getDictValueOrNull(variantDoc, "ref"),
+                                               getDictValueOrNull(variantDoc, "alt"),
+                                               getDictValueOrNull(variantDoc, "type"),
+                                               idArray,
+                                               hgvArray,
+                                               overallSOArray,
+                                               minSiftScore,
+                                               maxSiftScore,
+                                               minPphenScore,
+                                               maxPphenScore,
+                                               overallXrefArray
                                                ])
             except Exception as e:
-                print(sampleDoc["_id"])
+                print(variantDoc["_id"])
                 traceback.print_exc(file=sys.stdout)
                 break
 
-        hgvCSVHandle.close()
-        sampleAttrCSVHandle.close()
-        srcFileCSVHandle.close()
-        ctFileCSVHandle.close()
-        variantFileCSVHandle.close()
+        filesCSVHandle.close()
+        samplesCSVHandle.close()
+        annotCSVHandle.close()
+        variantCSVHandle.close()
 
 def get_free_space_mb(dirname):
     """Return folder/drive free space (in megabytes)."""
@@ -120,12 +205,13 @@ parser.add_option("-l", "--recordlimit", dest="recordLimit",
 
 postgresHost = getpass._raw_input("PostgreSQL Host:\n")
 postgresUser = getpass._raw_input("PostgreSQL Username:\n")
-postgresConnHandle = psycopg2.connect("dbname='postgres' user='{0}' host='{1}' password=''".format(postgresUser, postgresHost))
 
-client = MongoClient(getpass._raw_input("MongoDB Production Host:\n"))
+mongoHost = getpass._raw_input("MongoDB Production Host:\n")
+mongoUser = getpass._raw_input("MongoDB Production User:\n")
+mongoPass = getpass.getpass("MongoDB Production Password:\n")
+client = MongoClient(mongoHost)
 mongodbHandle = client["admin"]
-mongodbHandle.authenticate(getpass._raw_input("MongoDB Production User:\n"),
-                           getpass.getpass("MongoDB Production Password:\n"))
+mongodbHandle.authenticate(mongoUser,mongoPass)
 
 startTime = datetime.datetime.now()
 print("Start Time:" + str(startTime))
@@ -133,6 +219,7 @@ print("Start Time:" + str(startTime))
 numProcessors = multiprocessing.cpu_count()
 mongodbHandle = client["eva_hsapiens_grch37"]
 srcCollHandle = mongodbHandle["variants_1_2"]
+
 chromosome_LB_UB_Map = [{ "_id" : "1", "minStart" : 10020, "maxStart" : 249240605, "numEntries" : 12422239 },
 { "_id" : "2", "minStart" : 10133, "maxStart" : 243189190, "numEntries" : 13217397 },
 { "_id" : "3", "minStart" : 60069, "maxStart" : 197962381, "numEntries" : 10891260 },
@@ -161,6 +248,8 @@ chromosome_LB_UB_Map = [{ "_id" : "1", "minStart" : 10020, "maxStart" : 24924060
 totalAllowedRecords = int(get_tot_allowed_recs())
 totNumRecordsProcessed = 0
 for doc in chromosome_LB_UB_Map:
+    postgresConnHandle = psycopg2.connect(
+        "dbname='postgres' user='{0}' host='{1}' password=''".format(postgresUser, postgresHost))
     chromosome = doc["_id"]
     if is_registered(chromosome):
         continue
@@ -173,6 +262,7 @@ for doc in chromosome_LB_UB_Map:
         dmlCursor = postgresConnHandle.cursor()
         dmlCursor.execute("insert into public_1.reg_chrom values ('{0}','{1}')".format(chromosome, socket.getfqdn()))
         postgresConnHandle.commit()
+        postgresConnHandle.close()
         print("Processing chromosome: {0}".format(chromosome))
         step = 20000
         lowerBound = doc["minStart"]
