@@ -53,7 +53,8 @@ sample_index smallint,
 fid varchar(50),
 sid varchar(50),
 attrs jsonb,
-fm varchar(10)
+fm varchar(10),
+src bytea 
 );
 select create_distributed_table('public_1.variant_files', 'var_id', 'append');
 
@@ -77,6 +78,7 @@ pphen_desc text
 );
 select create_distributed_table('public_1.variant_annot', 'var_id', 'append');
 
+drop table public_1.variant;
 create table public_1.variant
 (
 var_id char(70),
@@ -88,12 +90,12 @@ var_ref text,
 var_alt text,
 var_type varchar(10),
 ids varchar(20)[],
-hgvs public_1.hgv [],
+hgvs jsonb,
 ct_so smallint[],
-ct_sift_min smallint,
-ct_sift_max smallint,
-ct_pphen_min smallint,
-ct_pphen_max smallint,
+ct_sift_min decimal(18,8),
+ct_sift_max decimal(18,8),
+ct_pphen_min decimal(18,8),
+ct_pphen_max decimal(18,8),
 ct_xref text[]
 );
 select create_distributed_table('public_1.variant', 'var_id', 'append');
@@ -106,16 +108,21 @@ hgv_type varchar(30),
 hgv_name varchar(100)
 );
 
-select * from public_1.hgv;
-select * from public_1.hgv_grp;
-select * from public_1.variant limit 100;
-select (annot_ref).ct_grp_id from public_1.variant group by 1;
-select * from public_1.ct limit 100;
-select * from public_1.ct_grp;
-select ct_id from public_1.ct_grp group by 1;
-select * from public_1.src_file;
-select * from public_1.file_grp;
-select * from public_1.variant_sample_attrs;
+
+select count(*) from public_1.variant;
+select count(*) from public_1.variant_files;
+select count(*) from public_1.variant_annot;
+select count(*) from public_1.variant_sample;
+select * from public_1.variant_annot where sift_sc is not null;
+select * from public_1.variant where ct_sift_min is not null and ct_sift_min <> ct_sift_max limit 100;
+select * from public_1.variant_files limit 100;
+select * from public_1.variant_sample limit 100;
+
+select master_modify_multiple_shards('delete from public_1.variant');
+select master_modify_multiple_shards('delete from public_1.variant_annot');
+select master_modify_multiple_shards('delete from public_1.variant_files');
+select master_modify_multiple_shards('delete from public_1.variant_sample');
+delete from public_1.reg_chrom ;
 
 select *
   from pg_dist_shard_placement
@@ -166,7 +173,8 @@ select * from public_1.variant where var_id = '21_000021353996_000021353999';
 select var_id, genotype, rng_start, rng_end from public_1.variant_sample_attrs where rng_start is not null group by 1,2,3,4 having count(*) > 1;
 select var_id, genotype, norng_index from public_1.variant_sample_attrs where norng_index is not null group by 1,2,3 having count(*) > 1;
 select * from public_1.stage_1 where so[1] = 1792;
-select master_modify_multiple_shards('delete from public_1.variant where chrom = ''21''');
+
+
 
 delete from public_1.src_file;
 delete from public_1.ct;
@@ -197,7 +205,6 @@ select * from public_1.dummy order by textval;
 create table public_1.reg_chrom(chrom text, host text);
 insert into public_1.reg_chrom values ('1', 'citusmaster.windows.ebi.ac.uk');
 select * from public_1.reg_chrom ;
-delete from public_1.reg_chrom ;
 
 select max(textval) from public_1.dummy 
 
