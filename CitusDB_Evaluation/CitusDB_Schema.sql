@@ -89,7 +89,7 @@ var_len integer,
 var_ref text,
 var_alt text,
 var_type varchar(10),
-ids varchar(20)[],
+ids varchar(100)[],
 hgvs jsonb,
 ct_so smallint[],
 ct_sift_min decimal(18,8),
@@ -118,6 +118,14 @@ select * from public_1.variant where ct_sift_min is not null and ct_sift_min <> 
 select * from public_1.variant_files limit 100;
 select * from public_1.variant_sample limit 100;
 
+explain
+select 
+varf.* 
+from 
+public_1.variant var
+inner join public_1.variant_files varf on varf.var_id = var.var_id
+where var.chrom = '1' and var.start_pos between 2066706 and 2076706
+
 select master_modify_multiple_shards('delete from public_1.variant');
 select master_modify_multiple_shards('delete from public_1.variant_annot');
 select master_modify_multiple_shards('delete from public_1.variant_files');
@@ -129,8 +137,10 @@ select *
  where shardid = (
    select get_shard_id_for_distribution_column('public_1.variant', '1_000227471340_000227471340')
  );
-select pg_size_pretty(citus_table_size('public_1.ct'));
-select pg_size_pretty(citus_table_size('public_1.variant'));
+select pg_size_pretty(citus_table_size('public_1.variant_annot')); --16GB for 23M records
+select pg_size_pretty(citus_table_size('public_1.variant_files')); --15GB for 23M records
+select pg_size_pretty(citus_table_size('public_1.variant_sample')); --32GB for 23M records
+select pg_size_pretty(citus_table_size('public_1.variant')); --7GB for 23M records
 select chrom from public_1.variant group by 1;
 select chrom from public_1.ct group by 1;
 explain select * from public_1.variant where var_id = '21_000048119868_000048119868';
@@ -219,6 +229,8 @@ create index chrom_idx_b on public_1.variant using btree (chrom);
 create index start_idx_b on public_1.variant using btree (start_pos);
 create index end_idx_b on public_1.variant using btree (end_pos);
 create index var_id_idx_b on public_1.variant using btree (var_id);
+create index var_id_idx_vf on public_1.variant_files using btree (var_id);
+create index var_id_idx_vs on public_1.variant_sample using btree (var_id);
 
 create index var_id_idx_ct_b on public_1.ct using btree (var_id);
 select master_modify_multiple_shards('drop index public_1.chrom_idx_b');
@@ -291,9 +303,34 @@ select substr(var_id, 1,1) from public_1.ct group by 1;
 
 select * from public_1.variant where chrom = '22' limit 100;
 
+explain select * from public_1.variant_files where VAR_ID like '22%' limit 100;
+explain select * from public_1.variant_sample where VAR_ID like '22%' limit 100;
+
+explain
+select
+var.var_id,
+varf.sample_index,
+varf.fid,
+varf.sid,
+varf.attrs
+from
+public_1.variant var 
+left join public_1.variant_files varf on varf.VAR_ID = var.VAR_ID
+where
+var.chrom = '22' and var.start_pos between 16050036 and 16051107;
+
 select * from public_1.ct where var_id like '22_000036051%' limit 100;
 
 create table public_1.hybrid_table(charfield varchar(10), intfield integer, otherfield jsonb);
 insert into public_1.hybrid_table values ('abc',2, '{"key1":"value1", "key2":"value2"}');
 insert into public_1.hybrid_table values ('abc',2, NULL);
 select * from public_1.hybrid_table where otherfield is null;
+
+alter table public_1.variant alter column ids type varchar(100)[];
+alter table public_1.variant alter column ids type varchar(100)[];
+alter table public_1.variant_files add column START_POS bigint;
+alter table public_1.variant_files add column END_POS bigint;
+
+
+select master_modify_multiple_shards('update public_1.variant_files set START_POS = cast(split_part(VAR_ID, ''_'', 2) as bigint);');
+select master_modify_multiple_shards('update public_1.variant_files set END_POS = cast(split_part(VAR_ID, ''_'', 3) as bigint);');

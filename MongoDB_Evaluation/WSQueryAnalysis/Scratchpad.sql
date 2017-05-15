@@ -16,7 +16,9 @@ CREATE INDEX ws_traffic_ts_idx ON public.ws_traffic (event_ts);
 
 drop view public.ws_traffic_useful_cols;
 create or replace view public.ws_traffic_useful_cols as (
-select event_ts, client, bytes_out, user_agent, duration, request_uri_path, request_query, seg_len, http_status from public.ws_traffic);
+select event_ts, client, bytes_out, user_agent, duration, request_uri_path, request_query, seg_len, http_status from public.ws_traffic 
+	where http_status not in ('400','404') and client not in ('193.62.194.244','193.62.194.245','193.62.194.241','193.63.221.163','193.62.194.246',
+	'193.62.194.251','86.130.14.35','193.62.194.242', '172.22.69.141', '172.22.69.81','172.22.71.2','172.22.68.226','172.22.69.8','172.22.69.245'));
 
 set random_page_cost to 4;
 
@@ -29,7 +31,7 @@ server_node text, user_agent text, request_type CHAR(30),  http_status CHAR(10),
 
 select cast('2017-05-03T20:07:02.755174+01:00' as timestamp with time zone)
 
-select max(event_ts_txt) as recent_ts from public.ws_traffic;
+select min(event_ts), max(event_ts) as recent_ts from public.ws_traffic_useful_cols;
 
 select http_status, count(*) from public.ws_traffic group by 1;
 select request_type, count(*) from public.ws_traffic group by 1;
@@ -68,3 +70,4 @@ select * from public.ws_traffic_useful_cols where cast(event_ts as text) like '2
 select * from public.ws_traffic_useful_cols where cast(event_ts as text) like '2017-05-04 15:14%' and request_uri_path like '%/segments/%';
 select * from public.ws_traffic_useful_cols where cast(event_ts as text) like '2017-05-02 11:24%' and request_uri_path like '%/segments/%';
 
+select get_bit(B'0110111',0)
