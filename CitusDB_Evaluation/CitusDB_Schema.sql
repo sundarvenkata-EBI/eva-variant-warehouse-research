@@ -35,6 +35,7 @@ create table public_1.variant_sample_attrs (
 );
 
 
+drop table public_1.variant_sample;
 create table public_1.variant_sample
 (
 var_id char(70),
@@ -45,7 +46,7 @@ sample_index_bits bit varying(1000000)
 );
 select create_distributed_table('public_1.variant_sample', 'var_id', 'append');
 
-
+drop table public_1.variant_files;
 create table public_1.variant_files
 (
 var_id varchar(70),
@@ -58,7 +59,7 @@ src bytea
 );
 select create_distributed_table('public_1.variant_files', 'var_id', 'append');
 
-
+drop table public_1.variant_annot;
 create table public_1.variant_annot
 (
 var_id varchar(70),
@@ -228,6 +229,11 @@ select master_modify_multiple_shards('delete from public_1.ct where var_id like 
 create index chrom_idx_b on public_1.variant using btree (chrom);
 create index start_idx_b on public_1.variant using btree (start_pos);
 create index end_idx_b on public_1.variant using btree (end_pos);
+
+create index chrom_idx_vf on public_1.variant_files using btree (chrom);
+create index start_idx_vf on public_1.variant_files using btree (start_pos);
+create index end_idx_vf on public_1.variant_files using btree (end_pos);
+
 create index var_id_idx_b on public_1.variant using btree (var_id);
 create index var_id_idx_vf on public_1.variant_files using btree (var_id);
 create index var_id_idx_vs on public_1.variant_sample using btree (var_id);
@@ -301,11 +307,13 @@ public_1.ct where var_id like '3_00004817%' group by 1;
 
 select substr(var_id, 1,1) from public_1.ct group by 1;
 
-select * from public_1.variant where chrom = '22' limit 100;
+select * from public_1.variant limit 100;
 
 explain select * from public_1.variant_files where VAR_ID like '22%' limit 100;
 explain select * from public_1.variant_sample where VAR_ID like '22%' limit 100;
+select * from public_1.variant_files limit 10;
 
+set citus.task_executor_type to "real-time";
 explain
 select
 var.var_id,
@@ -315,11 +323,15 @@ varf.sid,
 varf.attrs
 from
 public_1.variant var 
-left join public_1.variant_files varf on varf.VAR_ID = var.VAR_ID
+inner join public_1.variant_files varf on varf.VAR_ID = var.VAR_ID and varf.chrom = var.chrom and varf.start_pos = var.start_pos
 where
-var.chrom = '22' and var.start_pos between 16050036 and 16051107;
+var.chrom = 'X' and var.start_pos between 3800387 and 3900000 and varf.chrom = 'X' and varf.start_pos between 3800387 and 3900000;
+
+select * from public_1.variant_files varf where varf.chrom = '22' and varf.start_pos between 16050036 and 16051107;
 
 select * from public_1.ct where var_id like '22_000036051%' limit 100;
+
+select * from public_1.variant_files limit 10;
 
 create table public_1.hybrid_table(charfield varchar(10), intfield integer, otherfield jsonb);
 insert into public_1.hybrid_table values ('abc',2, '{"key1":"value1", "key2":"value2"}');
@@ -330,7 +342,15 @@ alter table public_1.variant alter column ids type varchar(100)[];
 alter table public_1.variant alter column ids type varchar(100)[];
 alter table public_1.variant_files add column START_POS bigint;
 alter table public_1.variant_files add column END_POS bigint;
+alter table public_1.variant_files add column CHROM VARCHAR(10);
 
+alter table public_1.variant_files drop column START_POS;
+alter table public_1.variant_files drop column END_POS;
+alter table public_1.variant_files drop column CHROM;
 
+select master_modify_multiple_shards('');
+select master_modify_multiple_shards('update public_1.variant_files set CHROM = split_part(VAR_ID, ''_'', 1)');
 select master_modify_multiple_shards('update public_1.variant_files set START_POS = cast(split_part(VAR_ID, ''_'', 2) as bigint);');
 select master_modify_multiple_shards('update public_1.variant_files set END_POS = cast(split_part(VAR_ID, ''_'', 3) as bigint);');
+
+select * from pg_catalog.pg_dist_shard_placement order by shardid;

@@ -30,3 +30,5 @@ nb-configuration.xml
 
 *.csv
 Postgres_Evaluation/MongoExportToCSV/tempDB
+
+MongoDB_Evaluation/KibanaLogs_EVA_WS\.txt
