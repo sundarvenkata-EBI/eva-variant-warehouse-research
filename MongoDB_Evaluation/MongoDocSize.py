@@ -1,4 +1,4 @@
-import sqlite3, getpass, bson, multiprocessing, csv, hashlib
+import sqlite3, getpass, bson, multiprocessing, csv, hashlib, psycopg2, socket
 from pymongo import MongoClient
 from multiprocessing import Process
 
@@ -34,8 +34,15 @@ chromosome_LB_UB_Map = [{ "_id" : "1", "minStart" : 10020, "maxStart" : 24924060
 { "_id" : "22", "minStart" : 16050036, "maxStart" : 51244515, "numEntries" : 2172028 },
 { "_id" : "X", "minStart" : 60003, "maxStart" : 155260479, "numEntries" : 5893713 },
 { "_id" : "Y", "minStart" : 10003, "maxStart" : 59363485, "numEntries" : 504508 }]
-
 numProcessors = multiprocessing.cpu_count()
+
+def is_registered(chromosome):
+    resultCursor = postgresConnHandle.cursor()
+    resultCursor.execute("select * from public_1.reg_chrom where chrom = '{0}'".format(chromosome))
+    if resultCursor.rowcount > 0:
+        return True
+    return False
+
 def maxCalc(variantDocs, batchNumber):
     if variantDocs:
         #region Initialize CSV file handles and writers
@@ -59,28 +66,38 @@ def maxCalc(variantDocs, batchNumber):
 
 for doc in chromosome_LB_UB_Map:
     chromosome = doc["_id"]
-    lowerBound = doc["minStart"]
-    upperBound = doc["maxStart"]
-    startRangeBegin = lowerBound
-    step = 200000
-    batchNumber = 0
-    while startRangeBegin < upperBound:
-        startRangeEnd = startRangeBegin + step
-        query = {"chr": chromosome, "start": {"$gte": startRangeBegin, "$lte": startRangeEnd}}
-        sampleDocs = list(srcCollHandle_grch37.find(query, no_cursor_timeout=True))
-        numRecs = len(sampleDocs)
-        if sampleDocs:
-            print("Processing batch:{0} for chromosome {1} with {2} records".format(str(batchNumber), chromosome,
-                                                                                    str(numRecs)))
-            if numRecs <= numProcessors:
-                maxCalc(sampleDocs, str(batchNumber) + "_0")
-            else:
-                processList = [Process(target=maxCalc, args=(
-                sampleDocs[i:i + (numRecs / numProcessors)], chromosome + "_" + str(batchNumber) + "_" + str(i))) for i in
-                               range(0, numRecs, (numRecs / numProcessors))]
-                for process in processList:
-                    process.start()
-                for process in processList:
-                    process.join()
-        startRangeBegin += (step+1)
-        batchNumber += 1
+    postgresConnHandle = psycopg2.connect(
+        "dbname='postgres' user='postgres' host='citusmaster.windows.ebi.ac.uk' password=''")
+    if is_registered(chromosome):
+        continue
+    else:
+        dmlCursor = postgresConnHandle.cursor()
+        dmlCursor.execute("insert into public_1.reg_chrom values ('{0}','{1}')".format(chromosome, socket.getfqdn()))
+        postgresConnHandle.commit()
+        postgresConnHandle.close()
+
+        lowerBound = doc["minStart"]
+        upperBound = doc["maxStart"]
+        startRangeBegin = lowerBound
+        step = 200000
+        batchNumber = 0
+        while startRangeBegin < upperBound:
+            startRangeEnd = startRangeBegin + step
+            query = {"chr": chromosome, "start": {"$gte": startRangeBegin, "$lte": startRangeEnd}}
+            sampleDocs = list(srcCollHandle_grch37.find(query, no_cursor_timeout=True))
+            numRecs = len(sampleDocs)
+            if sampleDocs:
+                print("Processing batch:{0} for chromosome {1} with {2} records".format(str(batchNumber), chromosome,
+                                                                                        str(numRecs)))
+                if numRecs <= numProcessors:
+                    maxCalc(sampleDocs, str(batchNumber) + "_0")
+                else:
+                    processList = [Process(target=maxCalc, args=(
+                    sampleDocs[i:i + (numRecs / numProcessors)], chromosome + "_" + str(batchNumber) + "_" + str(i))) for i in
+                                   range(0, numRecs, (numRecs / numProcessors))]
+                    for process in processList:
+                        process.start()
+                    for process in processList:
+                        process.join()
+            startRangeBegin += (step+1)
+            batchNumber += 1
