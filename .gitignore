@@ -32,3 +32,7 @@ nb-configuration.xml
 Postgres_Evaluation/MongoExportToCSV/tempDB
 
 MongoDB_Evaluation/KibanaLogs_EVA_WS\.txt
+
+MongoDB_Evaluation/MongoDocSize\.c
+
+MongoDB_Evaluation/MongoDocSize

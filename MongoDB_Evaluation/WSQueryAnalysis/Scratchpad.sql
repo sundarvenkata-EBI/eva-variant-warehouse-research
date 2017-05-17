@@ -17,8 +17,11 @@ CREATE INDEX ws_traffic_ts_idx ON public.ws_traffic (event_ts);
 drop view public.ws_traffic_useful_cols;
 create or replace view public.ws_traffic_useful_cols as (
 select event_ts, client, bytes_out, user_agent, duration, request_uri_path, request_query, seg_len, http_status from public.ws_traffic 
-	where http_status not in ('400','404') and client not in ('193.62.194.244','193.62.194.245','193.62.194.241','193.63.221.163','193.62.194.246',
-	'193.62.194.251','86.130.14.35','193.62.194.242', '172.22.69.141', '172.22.69.81','172.22.71.2','172.22.68.226','172.22.69.8','172.22.69.245'));
+	where http_status not in ('400','404') 
+	and client not in ('193.62.194.244','193.62.194.245','193.62.194.241','193.63.221.163','193.62.194.246',
+	'193.62.194.251','86.130.14.35','193.62.194.242', '172.22.69.141', '172.22.69.81','172.22.71.2','172.22.68.226','172.22.69.8','172.22.69.245',
+	'172.22.68.228', '172.22.68.113') and client not like '172.22.69%' and client not like '172.22.68%'
+	);
 
 set random_page_cost to 4;
 
@@ -57,9 +60,10 @@ $$ LANGUAGE plpythonu;
 select a.*,(case when a.request_query like '%exclude=sourceEntries%' then 1 else 0 end) as SRC_EXCL from public.ws_traffic_useful_cols a where request_uri_path like '%/segments/%' and http_status not in ('400','404') order by seg_len desc;
 
 select (case when a.request_query like '%exclude=sourceEntries%' then 1 else 0 end) as SRC_EXCL, count(*) from public.ws_traffic_useful_cols a where request_uri_path like '%/segments/%' and http_status not in ('400','404') group by 1;
-
 select * from public.ws_traffic_useful_cols where request_uri_path like '%/segments/%' and http_status not in ('400','404') 
-	and request_query not like '%exclude=sourceEntries%' order by event_ts;
+	and request_query not like '%exclude=sourceEntries%';
+select client,count(*) from public.ws_traffic_useful_cols where request_uri_path like '%/segments/%' and http_status not in ('400','404') 
+	and request_query not like '%exclude=sourceEntries%' group by 1 order by 2 desc;
 
 select * from (select substr(cast(event_ts as text), 1, 13) as traffic_hour, count(*) as hits  from public.ws_traffic_useful_cols group by 1) a order by hits desc;
 select * from (select substr(cast(event_ts as text), 1, 16) as traffic_hour, count(*) as hits  from public.ws_traffic_useful_cols group by 1) a order by hits desc;

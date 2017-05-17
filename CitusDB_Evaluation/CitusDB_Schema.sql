@@ -100,7 +100,7 @@ ct_pphen_max decimal(18,8),
 ct_xref text[]
 );
 select create_distributed_table('public_1.variant', 'var_id', 'append');
-set citus.shard_max_size to '30720mb';
+set citus.shard_max_size to '30720MB';
 
 create table public_1.hgv
 (
@@ -186,21 +186,6 @@ select var_id, genotype, norng_index from public_1.variant_sample_attrs where no
 select * from public_1.stage_1 where so[1] = 1792;
 
 
-
-delete from public_1.src_file;
-delete from public_1.ct;
-delete from public_1.variant;
-delete from public_1.hgv;
-delete from public_1.variant_sample_attrs;
-
-drop table public_1.src_file;
-drop table public_1.ct;
-drop table public_1.ct_grp;
-drop table public_1.variant;
-drop table public_1.hgv;
-drop table public_1.hgv_grp;
-drop table public_1.file_grp;
-drop table public_1.variant_sample_attrs;
 
 drop table public_1.dummy;
 create table public_1.dummy(textval text);
@@ -316,18 +301,19 @@ select * from public_1.variant_files limit 10;
 set citus.task_executor_type to "real-time";
 explain
 select
-var.var_id,
+var.*,
 varf.sample_index,
 varf.fid,
 varf.sid,
 varf.attrs
 from
-public_1.variant var 
-inner join public_1.variant_files varf on varf.VAR_ID = var.VAR_ID and varf.chrom = var.chrom and varf.start_pos = var.start_pos
-where
-var.chrom = 'X' and var.start_pos between 3800387 and 3900000 and varf.chrom = 'X' and varf.start_pos between 3800387 and 3900000;
+public_1.variant var
+left join 
+public_1.variant_files varf on varf.VAR_ID = var.VAR_ID and var.VAR_ID between 'X_000003800000_000003800000_00000000000000000000000000000000          ' and 'X_000003900000_000003900000_00000000000000000000000000000000          ' 
+and varf.VAR_ID between 'X_000003800000_000003800000_00000000000000000000000000000000          ' and 'X_000003900000_000003900000_00000000000000000000000000000000          ';
 
-select * from public_1.variant_files varf where varf.chrom = '22' and varf.start_pos between 16050036 and 16051107;
+select * from public_1.variant where chrom = 'X' and start_pos between 3800000 and 4800000;
+select * from public_1.variant where VAR_ID between 'X_000003800000_000003800000_00000000000000000000000000000000          ' and 'X_000003900000_000003900000_00000000000000000000000000000000          ';
 
 select * from public_1.ct where var_id like '22_000036051%' limit 100;
 
