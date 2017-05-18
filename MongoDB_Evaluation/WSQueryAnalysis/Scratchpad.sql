@@ -65,7 +65,8 @@ select * from public.ws_traffic_useful_cols where request_uri_path like '%/segme
 select client,count(*) from public.ws_traffic_useful_cols where request_uri_path like '%/segments/%' and http_status not in ('400','404') 
 	and request_query not like '%exclude=sourceEntries%' group by 1 order by 2 desc;
 
-select * from (select substr(cast(event_ts as text), 1, 13) as traffic_hour, count(*) as hits  from public.ws_traffic_useful_cols group by 1) a order by hits desc;
+
+select * from (select substr(cast(event_ts as text), 1, 13) as traffic_hour, count(*) as hits  from public.ws_traffic_useful_cols group by 1) a order by traffic_hour;
 select * from (select substr(cast(event_ts as text), 1, 16) as traffic_hour, count(*) as hits  from public.ws_traffic_useful_cols group by 1) a order by hits desc;
 select * from (select substr(cast(event_ts as text), 1, 16) as traffic_hour, count(distinct client) as hits  from public.ws_traffic_useful_cols 
 	where request_uri_path like '%/segments/%' and http_status not in ('400','404') group by 1) a order by hits desc;

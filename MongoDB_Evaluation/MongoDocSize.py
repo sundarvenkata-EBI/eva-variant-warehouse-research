@@ -60,7 +60,7 @@ def maxCalc(variantDocs, batchNumber):
                 maxDocSize = docSize
                 maxSizeDocID = variantID
 
-        maxCalcCSVWriter.writerow([variantID, maxDocSize])
+        maxCalcCSVWriter.writerow([maxSizeDocID, maxDocSize])
         maxCalcCSVHandle.close()
 
 
