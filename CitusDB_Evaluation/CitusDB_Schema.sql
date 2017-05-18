@@ -44,7 +44,7 @@ genotype varchar(5),
 tot_num_samp integer,
 sample_index_bits bit varying(1000000)
 );
-select create_distributed_table('public_1.variant_sample', 'var_id', 'append');
+select create_distributed_table('public_1.variant_sample', 'var_id');
 
 drop table public_1.variant_files;
 create table public_1.variant_files
@@ -57,7 +57,7 @@ attrs jsonb,
 fm varchar(10),
 src bytea 
 );
-select create_distributed_table('public_1.variant_files', 'var_id', 'append');
+select create_distributed_table('public_1.variant_files', 'var_id');
 
 drop table public_1.variant_annot;
 create table public_1.variant_annot
@@ -77,7 +77,7 @@ sift_desc text,
 pphen_sc decimal(18,10),
 pphen_desc text
 );
-select create_distributed_table('public_1.variant_annot', 'var_id', 'append');
+select create_distributed_table('public_1.variant_annot', 'var_id');
 
 drop table public_1.variant;
 create table public_1.variant
@@ -99,7 +99,7 @@ ct_pphen_min decimal(18,8),
 ct_pphen_max decimal(18,8),
 ct_xref text[]
 );
-select create_distributed_table('public_1.variant', 'var_id', 'append');
+select create_distributed_table('public_1.variant', 'var_id');
 set citus.shard_max_size to '30720MB';
 
 create table public_1.hgv

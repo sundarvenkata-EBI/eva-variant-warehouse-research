@@ -16,11 +16,11 @@ CREATE INDEX ws_traffic_ts_idx ON public.ws_traffic (event_ts);
 
 drop view public.ws_traffic_useful_cols;
 create or replace view public.ws_traffic_useful_cols as (
-select event_ts, client, bytes_out, user_agent, duration, request_uri_path, request_query, seg_len, http_status from public.ws_traffic 
+select request_ts, client_ip, bytes_out, user_agent, duration, request_uri_path, request_query, seg_len, http_status from public.ws_traffic 
 	where http_status not in ('400','404') 
-	and client not in ('193.62.194.244','193.62.194.245','193.62.194.241','193.63.221.163','193.62.194.246',
+	and client_ip not in ('193.62.194.244','193.62.194.245','193.62.194.241','193.63.221.163','193.62.194.246',
 	'193.62.194.251','86.130.14.35','193.62.194.242', '172.22.69.141', '172.22.69.81','172.22.71.2','172.22.68.226','172.22.69.8','172.22.69.245',
-	'172.22.68.228', '172.22.68.113') and client not like '172.22.69%' and client not like '172.22.68%'
+	'172.22.68.228', '172.22.68.113') and client_ip not like '172.22.69%' and client_ip not like '172.22.68%'
 	);
 
 set random_page_cost to 4;
@@ -29,8 +29,8 @@ select request_attr -> '_source' ->>'' from public.kibana_ws_logs order by reque
 
 drop table public.ws_traffic;
 create table public.ws_traffic (event_ts_txt text, event_ts timestamp with time zone, http_req_type text, host text, path text, syslog_pri text, syslog_timestamp text, syslog_hostname text, 
-remote_host text, request_ts timestamp with time zone, client text, bytes_out bigint, bytes_in bigint,  duration decimal(18,8), pool_name text,
-server_node text, user_agent text, request_type CHAR(30),  http_status CHAR(10), is_https CHAR(10), virtual_host text, request_uri_path text, request_query text, cookie_header text, seg_len bigint);
+remote_host text, request_ts timestamp without time zone, client_ip text, bytes_out bigint, bytes_in bigint,  duration decimal(18,8), pool_name text,
+server_node text, user_agent text, request_type CHAR(30),  http_status CHAR(10), is_https CHAR(10), virtual_host text, request_uri_path text, request_query text, cookie_header text, seg_len bigint, historic_data smallint);
 
 select cast('2017-05-03T20:07:02.755174+01:00' as timestamp with time zone)
 
@@ -75,4 +75,19 @@ select * from public.ws_traffic_useful_cols where cast(event_ts as text) like '2
 select * from public.ws_traffic_useful_cols where cast(event_ts as text) like '2017-05-04 15:14%' and request_uri_path like '%/segments/%';
 select * from public.ws_traffic_useful_cols where cast(event_ts as text) like '2017-05-02 11:24%' and request_uri_path like '%/segments/%';
 
-select get_bit(B'0110111',0)
+select get_bit(B'0110111',1);
+
+drop table public.kibana_ws_traffic_hist;
+create table public.kibana_ws_traffic_hist (uniq_id VARCHAR(100), request_ts timestamp, client_ip VARCHAR(20), bytes_out bigint, 
+	bytes_in bigint, duration decimal(18,8), pool_name text, server_node text, user_agent text,
+	request_type VARCHAR(30), http_status VARCHAR(10), is_https VARCHAR(10), virtual_host text, 
+	request_uri_path text, request_query text, cookie_header text);
+
+insert into public.ws_traffic (request_ts, client_ip, bytes_out, bytes_in, duration, pool_name, server_node, user_agent, request_type, 
+	http_status, is_https, virtual_host, request_uri_path, request_query, cookie_header, historic_data) 
+	select request_ts, client_ip, bytes_out, bytes_in, duration, pool_name, server_node, user_agent, request_type, 
+	http_status, is_https, virtual_host, request_uri_path, request_query, cookie_header,1 from public.kibana_ws_traffic_hist a;
+
+select min(request_ts)  from public.ws_traffic_useful_cols where request_uri_path like '%/segments/%';
+
+select * from public.ws_traffic_useful_cols where request_ts = '2014-04-16 16:39:07.000000';
