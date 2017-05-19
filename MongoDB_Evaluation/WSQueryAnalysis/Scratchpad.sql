@@ -20,7 +20,7 @@ select request_ts, client_ip, bytes_out, user_agent, duration, request_uri_path,
 	where http_status not in ('400','404') 
 	and client_ip not in ('193.62.194.244','193.62.194.245','193.62.194.241','193.63.221.163','193.62.194.246',
 	'193.62.194.251','86.130.14.35','193.62.194.242', '172.22.69.141', '172.22.69.81','172.22.71.2','172.22.68.226','172.22.69.8','172.22.69.245',
-	'172.22.68.228', '172.22.68.113') and client_ip not like '172.22.69%' and client_ip not like '172.22.68%'
+	'172.22.68.228', '172.22.68.113') and client_ip not like '172.22%'
 	);
 
 set random_page_cost to 4;
@@ -34,7 +34,7 @@ server_node text, user_agent text, request_type CHAR(30),  http_status CHAR(10),
 
 select cast('2017-05-03T20:07:02.755174+01:00' as timestamp with time zone)
 
-select min(event_ts), max(event_ts) as recent_ts from public.ws_traffic_useful_cols;
+select min(request_ts), max(request_ts) as recent_ts from public.ws_traffic_useful_cols;
 
 select http_status, count(*) from public.ws_traffic group by 1;
 select request_type, count(*) from public.ws_traffic group by 1;
@@ -59,11 +59,28 @@ $$ LANGUAGE plpythonu;
 
 select a.*,(case when a.request_query like '%exclude=sourceEntries%' then 1 else 0 end) as SRC_EXCL from public.ws_traffic_useful_cols a where request_uri_path like '%/segments/%' and http_status not in ('400','404') order by seg_len desc;
 
-select (case when a.request_query like '%exclude=sourceEntries%' then 1 else 0 end) as SRC_EXCL, count(*) from public.ws_traffic_useful_cols a where request_uri_path like '%/segments/%' and http_status not in ('400','404') group by 1;
+--What fraction of the requests have source entry exclusion flag set? - 65% approximately
+select (case when a.request_query like '%exclude=sourceEntries%' then 1 else 0 end) as SRC_EXCL, count(*) from public.ws_traffic_useful_cols a where request_uri_path like '%/segments/%' and http_status not in ('400','404')
+	and request_ts >= '2015-04-21 14:30:28.000000' group by 1;
+
+--What fraction of the requests have Sift score based queries? - 0.2% approximately
+select (case when a.request_query like '%sift%' then 1 else 0 end) as SIFT_INCL, count(*) from public.ws_traffic_useful_cols a where request_uri_path like '%/segments/%' and http_status not in ('400','404')
+	and request_ts >= (select min(request_ts)  from public.ws_traffic_useful_cols where request_uri_path like '%/segments/%'
+																																 and request_query like '%sift%') group by 1;
+
+select * from public.ws_traffic_useful_cols a where request_uri_path like '%/segments/%' and http_status not in ('400','404')
+	and request_ts >= (select min(request_ts)  from public.ws_traffic_useful_cols where request_uri_path like '%/segments/%'
+																																 and request_query like '%sift%')  and request_query like '%sift%';
+
+--What fraction of the requests have Polyphen score based queries? - 0.1% approximately
+select (case when a.request_query like '%polyphen%' then 1 else 0 end) as PPHEN_INCL, count(*) from public.ws_traffic_useful_cols a where request_uri_path like '%/segments/%' and http_status not in ('400','404')
+	and request_ts >= (select min(request_ts)  from public.ws_traffic_useful_cols where request_uri_path like '%/segments/%'
+																																 and request_query like '%polyphen%') group by 1;
+
 select * from public.ws_traffic_useful_cols where request_uri_path like '%/segments/%' and http_status not in ('400','404') 
 	and request_query not like '%exclude=sourceEntries%';
-select client,count(*) from public.ws_traffic_useful_cols where request_uri_path like '%/segments/%' and http_status not in ('400','404') 
-	and request_query not like '%exclude=sourceEntries%' group by 1 order by 2 desc;
+select client_ip,count(*) from public.ws_traffic_useful_cols where request_uri_path like '%/segments/%' and http_status not in ('400','404')
+	and request_query not like '%exclude=sourceEntries%' and request_ts >= '2015-04-21 14:30:28.000000' group by 1 order by 2 desc;
 
 
 select * from (select substr(cast(event_ts as text), 1, 13) as traffic_hour, count(*) as hits  from public.ws_traffic_useful_cols group by 1) a order by traffic_hour;
@@ -88,6 +105,23 @@ insert into public.ws_traffic (request_ts, client_ip, bytes_out, bytes_in, durat
 	select request_ts, client_ip, bytes_out, bytes_in, duration, pool_name, server_node, user_agent, request_type, 
 	http_status, is_https, virtual_host, request_uri_path, request_query, cookie_header,1 from public.kibana_ws_traffic_hist a;
 
-select min(request_ts)  from public.ws_traffic_useful_cols where request_uri_path like '%/segments/%';
+select min(request_ts)  from public.ws_traffic_useful_cols where request_uri_path like '%/segments/%'
+																																 and request_query like '%exclude=sourceEntries%';
 
-select * from public.ws_traffic_useful_cols where request_ts = '2014-04-16 16:39:07.000000';
+select min(request_ts)  from public.ws_traffic_useful_cols where request_uri_path like '%/segments/%'
+																																 and request_query like '%sift%';
+
+select * from public.ws_traffic_useful_cols where request_ts = '2015-04-21 14:30:28.000000';
+
+select * from public.ws_traffic_useful_cols order by bytes_out desc;
+
+select * from public.ws_traffic_useful_cols where user_agent like 'libwww-perl%' order by request_ts desc;
+--High frequency users of the web service
+select client_ip, count(*) as NUM_HITS from public.ws_traffic_useful_cols group by 1 order by 2 desc;
+--Consumers with high data downloads
+select client_ip, sum(bytes_out) as TOT_BYTES_OUT from public.ws_traffic_useful_cols group by 1 order by 2 desc;
+--Are consumers of the web service consciously adopting the usage of source entries exclusion? - No discernible trend
+select client_ip, trim(cast(extract(year from request_ts) as VARCHAR(10))) || lpad(trim(cast(extract(month from request_ts) as VARCHAR(10))),2,'0') as MTH,
+	count(*) from public.ws_traffic_useful_cols
+WHERE request_query like '%exclude=sourceEntries%' and request_ts >= '2015-04-21 14:30:28.000000'
+ group by 1,2 order by 1,2 ;

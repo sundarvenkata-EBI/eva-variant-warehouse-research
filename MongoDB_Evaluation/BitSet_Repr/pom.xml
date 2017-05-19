@@ -15,7 +15,10 @@
             <artifactId>commons-codec</artifactId>
             <version>1.10</version>
         </dependency>
+        <dependency>
+            <groupId>me.lemire.integercompression</groupId>
+            <artifactId>JavaFastPFOR</artifactId>
+            <version>[0.1,)</version>
+        </dependency>
     </dependencies>
-
-
 </project>

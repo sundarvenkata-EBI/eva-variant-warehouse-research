@@ -298,7 +298,7 @@ explain select * from public_1.variant_files where VAR_ID like '22%' limit 100;
 explain select * from public_1.variant_sample where VAR_ID like '22%' limit 100;
 select * from public_1.variant_files limit 10;
 
-set citus.task_executor_type to "real-time";
+set citus.task_executor_type to "task-tracker";
 explain
 select
 var.*,
@@ -346,7 +346,6 @@ alter table public_1.variant_files drop column START_POS;
 alter table public_1.variant_files drop column END_POS;
 alter table public_1.variant_files drop column CHROM;
 
-select master_modify_multiple_shards('');
 select master_modify_multiple_shards('update public_1.variant_files set CHROM = split_part(VAR_ID, ''_'', 1)');
 select master_modify_multiple_shards('update public_1.variant_files set START_POS = cast(split_part(VAR_ID, ''_'', 2) as bigint);');
 select master_modify_multiple_shards('update public_1.variant_files set END_POS = cast(split_part(VAR_ID, ''_'', 3) as bigint);');
