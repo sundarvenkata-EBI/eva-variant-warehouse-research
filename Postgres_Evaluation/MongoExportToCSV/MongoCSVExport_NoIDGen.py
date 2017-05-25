@@ -72,8 +72,9 @@ def insertDocs(variantDocs, batchNumber):
                                 gtBitArray = gtBitArray.to01() if gtBitArray else None
                                 samplesCSVWriter.writerow(
                                     [variantID, sampleIndex, genotype, numSamp, gtBitArray])
-                        samplesCSVWriter.writerow(
-                            [variantID, sampleIndex, defaultGenotype, numSamp, getGTBitArray(defaultGenotypeSampleSet, numSamp).to01()])
+                        if defaultGenotype:
+                            samplesCSVWriter.writerow(
+                                [variantID, sampleIndex, defaultGenotype, numSamp, getGTBitArray(defaultGenotypeSampleSet, numSamp).to01()])
 
                         attrs = getDictValueOrNull(doc, "attrs")
                         if "src" in attrs:

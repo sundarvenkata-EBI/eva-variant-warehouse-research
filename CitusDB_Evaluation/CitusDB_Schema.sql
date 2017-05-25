@@ -49,7 +49,7 @@ select create_distributed_table('public_1.variant_sample', 'var_id');
 drop table public_1.variant_files;
 create table public_1.variant_files
 (
-var_id varchar(70),
+var_id varchar(60),
 sample_index smallint,
 fid varchar(50),
 sid varchar(50),
@@ -62,7 +62,7 @@ select create_distributed_table('public_1.variant_files', 'var_id');
 drop table public_1.variant_annot;
 create table public_1.variant_annot
 (
-var_id varchar(70),
+var_id varchar(60),
 ct_index smallint,
 gn text,
 ensg varchar(30),
@@ -227,6 +227,10 @@ create index var_id_idx_ct_b on public_1.ct using btree (var_id);
 select master_modify_multiple_shards('drop index public_1.chrom_idx_b');
 explain select * from public_1.variant where chrom = '19' limit 100;
 
+cluster public_1.variant using var_id_idx_b;
+cluster public_1.variant_files using var_id_idx_vf;
+cluster verbose public_1.variant_sample using var_id_idx_vs;
+
 explain select * from public_1.variant where chrom = '2' and start_pos >= 47000000 and start_pos <= 49000000 and end_pos >= 48000000 and end_pos <= 50000000 and var_ref = 't' order by chrom limit 1000;
 
 select 
@@ -346,8 +350,11 @@ alter table public_1.variant_files drop column START_POS;
 alter table public_1.variant_files drop column END_POS;
 alter table public_1.variant_files drop column CHROM;
 
+
 select master_modify_multiple_shards('update public_1.variant_files set CHROM = split_part(VAR_ID, ''_'', 1)');
 select master_modify_multiple_shards('update public_1.variant_files set START_POS = cast(split_part(VAR_ID, ''_'', 2) as bigint);');
 select master_modify_multiple_shards('update public_1.variant_files set END_POS = cast(split_part(VAR_ID, ''_'', 3) as bigint);');
 
 select * from pg_catalog.pg_dist_shard_placement order by shardid;
+
+select character_length(var_id) from public_1.variant group by 1;

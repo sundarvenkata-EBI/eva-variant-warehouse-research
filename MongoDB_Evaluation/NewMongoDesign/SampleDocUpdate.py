@@ -1,18 +1,21 @@
 from pymongo import MongoClient
+import pymongo
 from multiprocessing import Process
 from commonpyutils import guiutils
-import os, copy
+import os, copy, bson, datetime,random
 
 devmongoClient = MongoClient(os.environ["MONGODEV_INSTANCE"])
 devMongodbHandle = devmongoClient["admin"]
 devMongodbHandle.authenticate(os.environ["MONGODEV_UNAME"], os.environ["MONGODEV_PASS"])
-unencoded_resultCollHandle = devmongoClient["eva_testing"]["sample_unenc"]
-encoded_resultCollHandle = devmongoClient["eva_testing"]["sample_enc"]
+unencoded_resultCollHandle = devmongoClient["eva_testing"]["sample_unenc_small"]
+encoded_resultCollHandle = devmongoClient["eva_testing"]["sample_enc_small"]
 
-client = MongoClient(guiutils.promptGUIInput("MongoDB Production Host:", "MongoDB Production Host:"))
+mongoProdHost = guiutils.promptGUIInput("MongoDB Production Host:", "MongoDB Production Host:")
+mongoProdUser = guiutils.promptGUIInput("MongoDB Production User:", "MongoDB Production User:")
+mongoProdPwd = guiutils.promptGUIInput("MongoDB Production Password:", "MongoDB Production Password:", "*")
+client = MongoClient(mongoProdHost)
 mongodbHandle = client["admin"]
-mongodbHandle.authenticate(guiutils.promptGUIInput("MongoDB Production User:", "MongoDB Production User:"),
-                           guiutils.promptGUIInput("MongoDB Production Password:", "MongoDB Production Password:", "*"))
+mongodbHandle.authenticate(mongoProdUser, mongoProdPwd)
 
 mongodbHandle = client["eva_hsapiens_grch37"]
 srcCollHandle_grch37 = mongodbHandle["variants_1_2"]
@@ -47,23 +50,22 @@ chromosome_LB_UB_Map = [{ "_id" : "1", "minStart" : 10020, "maxStart" : 24924060
 { "_id" : "X", "minStart" : 60003, "maxStart" : 155260479, "numEntries" : 5893713 },
 { "_id" : "Y", "minStart" : 10003, "maxStart" : 59363485, "numEntries" : 504508 }]
 
-def hexencode(sampleIndexSet, numSamp):
-    hexLookup = {'0000': 0, '0001': 1,'0010': 2,'0011': 3,'0100': 4,'0101': 5,'0110': 6,'0111': 7,
-                 '1000': 8,'1001': 9,'1010': 10,'1011': 11,'1100': 12,'1101': 13,'1110': 14,'1111': 15}
+def binencode(sampleIndexSet, numSamp):
     bitArray = ['0']*numSamp
     extraAlloc = 0
-    if numSamp%4 > 0: extraAlloc = 1
-    resultArray = ['']*((numSamp/4)+extraAlloc)
+    if numSamp&31 > 0: extraAlloc = 1
+    resultArray = ['']*((numSamp>>5)+extraAlloc)
     for elem in sampleIndexSet:
         bitArray[elem] = '1'
     bitArray = ''.join(bitArray)
-    for i in range(0,numSamp,4):
-        lookupVal = bitArray[i:i+4]
-        if i + 4 > numSamp: lookupVal = lookupVal.zfill(4)
-        resultArray[i/4] = hexLookup[lookupVal]
+    for i in range(0,numSamp,32):
+        lookupVal = bitArray[i:i+32]
+        if i + 32 > numSamp: lookupVal = lookupVal.zfill(32)
+        resultArray[i>>5] = int(lookupVal,2)
     return resultArray
 
-
+numEncTimes = 0
+cumExecTime = 0
 for entry in chromosome_LB_UB_Map:
     chromosome = entry["_id"]
     lowerBound = entry["minStart"]
@@ -90,7 +92,11 @@ for entry in chromosome_LB_UB_Map:
                 else:
                     sampleIndexSet = set(sampleDoc[sampleKey])
                     defaultGenotypeSampleSet = defaultGenotypeSampleSet - sampleIndexSet
-                    sampleDoc[sampleKey] = hexencode(sampleIndexSet, numSamp)
+                    startTime = datetime.datetime.now()
+                    sampleDoc[sampleKey] = binencode(sampleIndexSet, numSamp)
+                    endTime = datetime.datetime.now()
+                    cumExecTime += (endTime-startTime).total_seconds()
+                    numEncTimes += 1
             #del sampleDoc["def"]
             #sampleDoc[defaultGenotype] = hexencode(defaultGenotypeSampleSet, numSamp)
             filesDoc["samp"] = sampleDoc
@@ -100,3 +106,40 @@ for entry in chromosome_LB_UB_Map:
         unencoded_resultCollHandle.insert(originalDoc)
         variantDoc["files"] = filesDocs
         encoded_resultCollHandle.insert(variantDoc)
+
+print("Average binary encoding execution time: {0}".format(str(cumExecTime/numEncTimes)))
+
+
+# Execution times for Single Scan with filter on non-indexed field
+numRuns = 30
+minChromPos= 2000000
+maxChromPos = 100000000
+mongoCumulativeExecTime = 0
+margin = 1000000
+chromosome = "1"
+print("Start Time for single-scan:{0}".format(datetime.datetime.now()))
+for i in range(0, numRuns):
+    pos = random.randint(minChromPos, maxChromPos)
+    # Proxy Query
+    # step = 200000
+    startFirstPos = pos - margin
+    startLastPos = pos + margin
+    endFirstPos = pos
+    endLastPos = pos + margin + margin
+
+    startTime = datetime.datetime.now()
+    #query = {"chr": chromosome, "start": {"$gt": startFirstPos, "$lte": startLastPos},"end": {"$gte": endFirstPos, "$lt": endLastPos}, "files.samp.1|0.1": {"$bitsAnySet": [3,4]}}
+    query = {"chr": chromosome, "start": {"$gt": startFirstPos, "$lte": startLastPos},
+             "end": {"$gte": endFirstPos, "$lt": endLastPos}, "files.samp.1|0": {"$in": [3, 4]}}
+    resultList = list(srcCollHandle_grch37.find(query, {"_id":1, "chr": 1, "start": 1, "end" : 1, "type": 1, "len": 1, "ref": 1, "alt": 1}).sort([("chr", pymongo.ASCENDING), ("start", pymongo.ASCENDING)]))
+    # startFirstPos += step
+    # endFirstPos += step
+    endTime = datetime.datetime.now()
+    duration = (endTime - startTime).total_seconds()
+    mongoCumulativeExecTime += duration
+    print("Mongo: Returned {0} records in {1} seconds".format(len(resultList), duration))
+    print("****************")
+print("Average Mongo Execution time:{0}".format(mongoCumulativeExecTime/numRuns))
+
+devmongoClient.close()
+client.close()

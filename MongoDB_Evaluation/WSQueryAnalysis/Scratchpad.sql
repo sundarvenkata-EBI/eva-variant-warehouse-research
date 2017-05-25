@@ -125,3 +125,12 @@ select client_ip, trim(cast(extract(year from request_ts) as VARCHAR(10))) || lp
 	count(*) from public.ws_traffic_useful_cols
 WHERE request_query like '%exclude=sourceEntries%' and request_ts >= '2015-04-21 14:30:28.000000'
  group by 1,2 order by 1,2 ;
+
+select avg(bytes_out) from public.ws_traffic_useful_cols where request_uri_path like '%/segments/%' and
+	request_ts >= '2016-01-01 00:00:00.000000';
+
+select avg(bytes_out) from public.ws_traffic_useful_cols where request_query like '%exclude=sourceEntries%' and
+	request_ts >= '2016-01-01 00:00:00.000000' ;
+
+select avg(bytes_out) from public.ws_traffic_useful_cols where request_query like '%histogram=%';
+select * from public.ws_traffic_useful_cols where request_query like '%histogram=%';
