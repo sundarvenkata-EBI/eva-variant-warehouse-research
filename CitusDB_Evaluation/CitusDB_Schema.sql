@@ -39,17 +39,19 @@ drop table public_1.variant_sample;
 create table public_1.variant_sample
 (
 var_id char(70),
+chunk_id varchar(10),
 sample_index smallint,
 genotype varchar(5),
 tot_num_samp integer,
 sample_index_bits bit varying(1000000)
 );
-select create_distributed_table('public_1.variant_sample', 'var_id');
+select create_distributed_table('public_1.variant_sample', 'chunk_id');
 
 drop table public_1.variant_files;
 create table public_1.variant_files
 (
 var_id varchar(60),
+chunk_id varchar(10),
 sample_index smallint,
 fid varchar(50),
 sid varchar(50),
@@ -57,12 +59,13 @@ attrs jsonb,
 fm varchar(10),
 src bytea 
 );
-select create_distributed_table('public_1.variant_files', 'var_id');
+select create_distributed_table('public_1.variant_files', 'chunk_id');
 
 drop table public_1.variant_annot;
 create table public_1.variant_annot
 (
 var_id varchar(60),
+chunk_id varchar(10),
 ct_index smallint,
 gn text,
 ensg varchar(30),
@@ -77,12 +80,13 @@ sift_desc text,
 pphen_sc decimal(18,10),
 pphen_desc text
 );
-select create_distributed_table('public_1.variant_annot', 'var_id');
+select create_distributed_table('public_1.variant_annot', 'chunk_id');
 
 drop table public_1.variant;
 create table public_1.variant
 (
 var_id char(70),
+chunk_id varchar(10),
 chrom varchar(10),
 start_pos bigint,
 end_pos bigint,
@@ -99,7 +103,7 @@ ct_pphen_min decimal(18,8),
 ct_pphen_max decimal(18,8),
 ct_xref text[]
 );
-select create_distributed_table('public_1.variant', 'var_id');
+select create_distributed_table('public_1.variant', 'chunk_id');
 set citus.shard_max_size to '30720MB';
 
 create table public_1.hgv
@@ -302,6 +306,7 @@ explain select * from public_1.variant_files where VAR_ID like '22%' limit 100;
 explain select * from public_1.variant_sample where VAR_ID like '22%' limit 100;
 select * from public_1.variant_files limit 10;
 
+set citus.task_executor_type to "real-time";
 set citus.task_executor_type to "task-tracker";
 explain
 select
@@ -313,8 +318,8 @@ varf.attrs
 from
 public_1.variant var
 left join 
-public_1.variant_files varf on varf.VAR_ID = var.VAR_ID and var.VAR_ID between 'X_000003800000_000003800000_00000000000000000000000000000000          ' and 'X_000003900000_000003900000_00000000000000000000000000000000          ' 
-and varf.VAR_ID between 'X_000003800000_000003800000_00000000000000000000000000000000          ' and 'X_000003900000_000003900000_00000000000000000000000000000000          ';
+public_1.variant_files varf on varf.VAR_ID = var.VAR_ID and var.VAR_ID between 'X_000003800000_000003800000_00000000000000000000000000000000          ' and 'X_000003801000_000003901000_00000000000000000000000000000000          ' 
+and varf.VAR_ID between 'X_000003800000_000003800000_00000000000000000000000000000000          ' and 'X_000003801000_000003801000_00000000000000000000000000000000          ';
 
 select
 var.*,
@@ -357,4 +362,4 @@ select master_modify_multiple_shards('update public_1.variant_files set END_POS 
 
 select * from pg_catalog.pg_dist_shard_placement order by shardid;
 
-select character_length(var_id) from public_1.variant group by 1;
+select CHROM from public_1.variant group by 1;
