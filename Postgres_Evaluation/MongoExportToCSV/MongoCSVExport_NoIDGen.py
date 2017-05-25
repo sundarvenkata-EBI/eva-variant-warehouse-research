@@ -45,6 +45,7 @@ def insertDocs(variantDocs, batchNumber):
         for variantDoc in variantDocs:
             variantID = variantDoc["chr"] + "_" + str(variantDoc["start"]).zfill(12) + "_" + str(variantDoc["end"]).zfill(12) + "_" + hashlib.md5(variantDoc["ref"] + "_" + variantDoc["alt"]).hexdigest()
             chunkID = variantDoc["chr"] + "_" + (variantDoc["start"]/1000000)
+            print("Chunk ID:" + chunkID)
             try:
                 sampleIndex = 0
                 defaultGenotype = None
