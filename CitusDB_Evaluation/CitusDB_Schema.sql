@@ -40,6 +40,9 @@ create table public_1.variant_sample
 (
 var_id char(70),
 chunk_id varchar(10),
+chrom varchar(10),
+start_pos bigint,
+end_pos bigint,
 sample_index smallint,
 genotype varchar(5),
 tot_num_samp integer,
@@ -52,6 +55,9 @@ create table public_1.variant_files
 (
 var_id varchar(60),
 chunk_id varchar(10),
+chrom varchar(10),
+start_pos bigint,
+end_pos bigint,
 sample_index smallint,
 fid varchar(50),
 sid varchar(50),
@@ -66,6 +72,9 @@ create table public_1.variant_annot
 (
 var_id varchar(60),
 chunk_id varchar(10),
+chrom varchar(10),
+start_pos bigint,
+end_pos bigint,
 ct_index smallint,
 gn text,
 ensg varchar(30),

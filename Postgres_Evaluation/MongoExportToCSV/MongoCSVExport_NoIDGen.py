@@ -45,6 +45,9 @@ def insertDocs(variantDocs, batchNumber):
         for variantDoc in variantDocs:
             variantID = variantDoc["chr"] + "_" + str(variantDoc["start"]).zfill(12) + "_" + str(variantDoc["end"]).zfill(12) + "_" + hashlib.md5(variantDoc["ref"] + "_" + variantDoc["alt"]).hexdigest()
             chunkID = variantDoc["chr"] + "_" + str(variantDoc["start"]/1000000)
+            currChrom = variantDoc["chr"]
+            currStartPos = variantDoc["start"]
+            currEndPos = variantDoc["end"]
             try:
                 sampleIndex = 0
                 defaultGenotype = None
@@ -72,10 +75,10 @@ def insertDocs(variantDocs, batchNumber):
                                     gtBitArray = getGTBitArray(sampleIndexSet, numSamp)
                                 gtBitArray = gtBitArray.to01() if gtBitArray else None
                                 samplesCSVWriter.writerow(
-                                    [variantID, chunkID, sampleIndex, genotype, numSamp, gtBitArray])
+                                    [variantID, chunkID, currChrom, currStartPos, currEndPos, sampleIndex, genotype, numSamp, gtBitArray])
                         if defaultGenotype:
                             samplesCSVWriter.writerow(
-                                [variantID, chunkID, sampleIndex, defaultGenotype, numSamp, getGTBitArray(defaultGenotypeSampleSet, numSamp).to01()])
+                                [variantID, chunkID, currChrom, currStartPos, currEndPos, sampleIndex, defaultGenotype, numSamp, getGTBitArray(defaultGenotypeSampleSet, numSamp).to01()])
 
                         attrs = getDictValueOrNull(doc, "attrs")
                         if "src" in attrs:
@@ -83,7 +86,7 @@ def insertDocs(variantDocs, batchNumber):
                             del attrs["src"]
                         if attrs: attrs = json.dumps(attrs, encoding ='latin1')
                     filesCSVWriter.writerow(
-                            [variantID, chunkID, sampleIndex, getDictValueOrNull(doc, "fid"), getDictValueOrNull(doc, "sid"),
+                            [variantID, chunkID, currChrom, currStartPos, currEndPos, sampleIndex, getDictValueOrNull(doc, "fid"), getDictValueOrNull(doc, "sid"),
                              attrs, getDictValueOrNull(doc, "fm"),  srcBinData])
                     sampleIndex += 1
 
@@ -123,7 +126,7 @@ def insertDocs(variantDocs, batchNumber):
                             minPphenScore = pphenScore if not minPphenScore else min(pphenScore, minPphenScore)
                             maxPphenScore = pphenScore if not maxPphenScore else max(pphenScore, maxPphenScore)
                         annotCSVWriter.writerow(
-                            [variantID, chunkID, ctIndex, getDictValueOrNull(ctDoc, "gn"), getDictValueOrNull(ctDoc, "ensg"),
+                            [variantID, chunkID, currChrom, currStartPos, currEndPos, ctIndex, getDictValueOrNull(ctDoc, "gn"), getDictValueOrNull(ctDoc, "ensg"),
                              getDictValueOrNull(ctDoc, "enst"),
                              getDictValueOrNull(ctDoc, "codon"), getDictValueOrNull(ctDoc, "strand"),
                              getDictValueOrNull(ctDoc, "bt"), getDictValueOrNull(ctDoc, "aaChange"),
