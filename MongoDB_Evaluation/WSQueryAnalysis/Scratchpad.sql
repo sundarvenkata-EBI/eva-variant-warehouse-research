@@ -16,8 +16,8 @@ CREATE INDEX ws_traffic_ts_idx ON public.ws_traffic (event_ts);
 
 drop view public.ws_traffic_useful_cols;
 create or replace view public.ws_traffic_useful_cols as (
-select request_ts, client_ip, bytes_out, user_agent, duration, request_uri_path, request_query, seg_len, http_status from public.ws_traffic 
-	where http_status not in ('400','404') 
+select request_ts, client_ip, bytes_out, user_agent, duration, request_uri_path, request_query, seg_len, http_status from public.ws_traffic
+	where http_status not in ('400','404', '500')
 	and client_ip not in ('193.62.194.244','193.62.194.245','193.62.194.241','193.63.221.163','193.62.194.246',
 	'193.62.194.251','86.130.14.35','193.62.194.242', '172.22.69.141', '172.22.69.81','172.22.71.2','172.22.68.226','172.22.69.8','172.22.69.245',
 	'172.22.68.228', '172.22.68.113') and client_ip not like '172.22%'
@@ -41,21 +41,42 @@ select request_type, count(*) from public.ws_traffic group by 1;
 select is_https, count(*) from public.ws_traffic group by 1;
 select request_uri_path from public.ws_traffic group by 1;
 
-select request_uri_path
 select * from public.ws_traffic where request_uri_path like '%/segments/%' order by duration desc;
 select * from public.ws_traffic where request_query like '%histogram=%' order by duration desc;
-select * from public.ws_traffic_useful_cols where request_uri_path like '%/segments/%' order by event_ts;
+select a.*, getTotalSegmentLength(request_uri_path) from public.ws_traffic_useful_cols a where a.request_uri_path like '%/segments/%';
+select * from public.ws_traffic_useful_cols where request_uri_path like '%/segments/%' order by request_ts;
 select * from public.ws_traffic_useful_cols where user_agent like '%WormBase%' and request_uri_path like '%/segments/%' order by seg_len desc;
 
 select * from public.ws_traffic_useful_cols where request_uri_path like '%/segments/%' and http_status <> '400' order by seg_len desc;
 
 select user_agent, max(bytes_out), max(seg_len) from public.ws_traffic_useful_cols where request_uri_path like '%/segments/%' and http_status <> '400' group by 1;
 
-CREATE FUNCTION return_arr()
-  RETURNS int[]
+CREATE or REPLACE FUNCTION getTotalSegmentLength(querystring text)
+  RETURNS int
 AS $$
-return (1, 2, 3, 4, 5)
+totSegmentLength = 0
+try:
+	segments = querystring.split("/segments/")[1].split("/variants")[0].split(",")
+	for segment in segments:
+			segment = segment.strip()
+			if segment:
+					segmentLBUB = segment.split(":")[1].split("-")
+					if len(segmentLBUB) < 2: return int(totSegmentLength)
+					segmentLength = float(segmentLBUB[1]) - float(segmentLBUB[0])
+					if (segmentLength > 0): totSegmentLength += segmentLength
+except Exception:
+	print(querystring)
+return int(totSegmentLength)
 $$ LANGUAGE plpythonu;
+
+CREATE or REPLACE FUNCTION unquoteRequestURI(requesturi text)
+	RETURNS text
+AS $$
+import urllib2
+requesturi_new = requesturi.encode("utf8")
+return urllib2.unquote(requesturi_new).decode("latin1")
+$$ LANGUAGE plpythonu;
+
 
 select a.*,(case when a.request_query like '%exclude=sourceEntries%' then 1 else 0 end) as SRC_EXCL from public.ws_traffic_useful_cols a where request_uri_path like '%/segments/%' and http_status not in ('400','404') order by seg_len desc;
 
@@ -126,11 +147,25 @@ select client_ip, trim(cast(extract(year from request_ts) as VARCHAR(10))) || lp
 WHERE request_query like '%exclude=sourceEntries%' and request_ts >= '2015-04-21 14:30:28.000000'
  group by 1,2 order by 1,2 ;
 
-select avg(bytes_out) from public.ws_traffic_useful_cols where request_uri_path like '%/segments/%' and
+select avg(bytes_out), avg(duration) from public.ws_traffic_useful_cols where request_uri_path like '%/segments/%' and
 	request_ts >= '2016-01-01 00:00:00.000000';
 
 select avg(bytes_out) from public.ws_traffic_useful_cols where request_query like '%exclude=sourceEntries%' and
 	request_ts >= '2016-01-01 00:00:00.000000' ;
 
-select avg(bytes_out) from public.ws_traffic_useful_cols where request_query like '%histogram=%';
+select avg(bytes_out), avg(duration) from public.ws_traffic_useful_cols where request_query like '%histogram=%';
 select * from public.ws_traffic_useful_cols where request_query like '%histogram=%';
+
+update public.ws_traffic set request_uri_path = unquoteRequestURI(request_uri_path) where historic_data = 1;
+update public.ws_traffic set request_query = unquoteRequestURI(request_query) where request_query is not null and historic_data = 1;
+update public.ws_traffic set seg_len = getTotalSegmentLength(request_uri_path) where historic_data = 1 and seg_len is null
+																																										 and request_uri_path like '%/segments/%' and http_status not in ('400','404', '500');
+
+select a.*, getTotalSegmentLength(request_uri_path) from ws_traffic a where historic_data = 1 and seg_len is null and request_uri_path like '%/segments/%' and http_status not in ('400','404', '500');
+select a.* from ws_traffic a where historic_data = 1 and seg_len is null and request_uri_path like '%/segments/%' and http_status not in ('400','404', '500') limit 10;
+select a.* from ws_traffic a where request_query like '%&amp%';
+alter table public.ws_traffic alter column request_uri_path type text charact;
+show CLIENT_ENCODING ;
+set CLIENT_ENCODING  to 'latin1';
+
+select * from ws_traffic_useful_cols where request_uri_path like '%segments%' and request_uri_path like '%contig%' ;

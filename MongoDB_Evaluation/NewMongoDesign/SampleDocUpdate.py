@@ -50,6 +50,32 @@ chromosome_LB_UB_Map = [{ "_id" : "1", "minStart" : 10020, "maxStart" : 24924060
 { "_id" : "X", "minStart" : 60003, "maxStart" : 155260479, "numEntries" : 5893713 },
 { "_id" : "Y", "minStart" : 10003, "maxStart" : 59363485, "numEntries" : 504508 }]
 
+def convertNumberArrayToRange(numArray):
+    resultArray = []
+    reArrangedArray = sorted(numArray)
+    rangeStartIndex = reArrangedArray[0]
+    rangeEndIndex = rangeStartIndex
+    prevNum = rangeStartIndex
+    for i in range(1, len(reArrangedArray)):
+        if reArrangedArray[i] == (prevNum + 1):
+            prevNum = reArrangedArray[i]
+            rangeEndIndex = reArrangedArray[i]
+            continue
+        else:
+            if (rangeEndIndex - rangeStartIndex) >= 5:
+                resultArray.append({"s": rangeStartIndex, "e": rangeEndIndex})
+            else:
+                resultArray.extend(range(rangeStartIndex, rangeEndIndex+1))
+            rangeStartIndex = reArrangedArray[i]
+            rangeEndIndex = rangeStartIndex
+            prevNum = rangeStartIndex
+
+    if (rangeEndIndex - rangeStartIndex) >= 5:
+        resultArray.append({"s": rangeStartIndex, "e": rangeEndIndex})
+    else:
+        resultArray.extend(range(rangeStartIndex, rangeEndIndex + 1))
+    return resultArray
+
 def binencode(sampleIndexSet, numSamp):
     bitArray = ['0']*numSamp
     extraAlloc = 0
@@ -66,12 +92,14 @@ def binencode(sampleIndexSet, numSamp):
 
 numEncTimes = 0
 cumExecTime = 0
+encoded_resultCollHandle.delete_many({})
+unencoded_resultCollHandle.delete_many({})
 for entry in chromosome_LB_UB_Map:
     chromosome = entry["_id"]
     lowerBound = entry["minStart"]
     upperBound = entry["maxStart"]
     query = {"chr": chromosome, "start": {"$gte": lowerBound, "$lte": upperBound}, "files.samp": {"$exists": "true"}}
-    results = list(srcCollHandle_grch37.find(query).limit(100))
+    results = list(srcCollHandle_grch37.find(query).limit(10000))
     for variantDoc in results:
         originalDoc = copy.deepcopy(variantDoc)
         filesDocs = variantDoc["files"]
@@ -101,6 +129,14 @@ for entry in chromosome_LB_UB_Map:
             #sampleDoc[defaultGenotype] = hexencode(defaultGenotypeSampleSet, numSamp)
             filesDoc["samp"] = sampleDoc
             filesDocs[filesDocIndex] = filesDoc
+            originalFilesDocIndex = 0
+            while True:
+                if originalDoc["files"][originalFilesDocIndex]["fid"] == fid and originalDoc["files"][originalFilesDocIndex]["sid"] == sid:
+                    if "def" in originalDoc["files"][originalFilesDocIndex]["samp"]:
+                        del originalDoc["files"][originalFilesDocIndex]["samp"]["def"]
+                    originalDoc["files"][originalFilesDocIndex]["samp"][defaultGenotype] = convertNumberArrayToRange(defaultGenotypeSampleSet)
+                    break
+                originalFilesDocIndex += 1
             filesDocIndex += 1
 
         unencoded_resultCollHandle.insert(originalDoc)

@@ -38,7 +38,7 @@ create table public_1.variant_sample_attrs (
 drop table public_1.variant_sample;
 create table public_1.variant_sample
 (
-var_id char(70),
+var_id char(60),
 chunk_id varchar(10),
 chrom varchar(10),
 start_pos bigint,
@@ -53,7 +53,7 @@ select create_distributed_table('public_1.variant_sample', 'chunk_id');
 drop table public_1.variant_files;
 create table public_1.variant_files
 (
-var_id varchar(60),
+var_id char(60),
 chunk_id varchar(10),
 chrom varchar(10),
 start_pos bigint,
@@ -70,7 +70,7 @@ select create_distributed_table('public_1.variant_files', 'chunk_id');
 drop table public_1.variant_annot;
 create table public_1.variant_annot
 (
-var_id varchar(60),
+var_id char(60),
 chunk_id varchar(10),
 chrom varchar(10),
 start_pos bigint,
@@ -94,7 +94,7 @@ select create_distributed_table('public_1.variant_annot', 'chunk_id');
 drop table public_1.variant;
 create table public_1.variant
 (
-var_id char(70),
+var_id char(60),
 chunk_id varchar(10),
 chrom varchar(10),
 start_pos bigint,
@@ -115,20 +115,13 @@ ct_xref text[]
 select create_distributed_table('public_1.variant', 'chunk_id');
 set citus.shard_max_size to '30720MB';
 
-create table public_1.hgv
-(
-var_id text,
-hgv_type varchar(30),
-hgv_name varchar(100)
-);
-
-
 select count(*) from public_1.variant;
 select count(*) from public_1.variant_files;
 select count(*) from public_1.variant_annot;
 select count(*) from public_1.variant_sample;
 select * from public_1.variant_annot where sift_sc is not null;
 select * from public_1.variant where ct_sift_min is not null and ct_sift_min <> ct_sift_max limit 100;
+select * from public_1.variant limit 100;
 select * from public_1.variant_files limit 100;
 select * from public_1.variant_sample limit 100;
 
@@ -329,6 +322,29 @@ public_1.variant var
 left join 
 public_1.variant_files varf on varf.VAR_ID = var.VAR_ID and var.VAR_ID between 'X_000003800000_000003800000_00000000000000000000000000000000          ' and 'X_000003801000_000003901000_00000000000000000000000000000000          ' 
 and varf.VAR_ID between 'X_000003800000_000003800000_00000000000000000000000000000000          ' and 'X_000003801000_000003801000_00000000000000000000000000000000          ';
+
+explain
+select
+var.*,
+varf.sample_index,
+varf.fid,
+varf.sid,
+varf.attrs
+from
+public_1.variant var
+left join 
+public_1.variant_files varf on varf.VAR_ID = var.VAR_ID and varf.chunk_id = var.chunk_id 
+and varf.chrom = var.chrom and varf.start_pos = var.start_pos and varf.end_pos = var.end_pos
+where var.chrom = '2' and var.start_pos between 11007658 and 11027658 and var.end_pos between 11007658 and 11027658 and var.chunk_id = '2_11'
+order by var_id;
+
+explain 
+select * from public_1.variant var where var.chrom = '2' and var.start_pos between 11007658 and 11027658 and var.end_pos between 11007658 and 11027658
+and var.chunk_id = '2_11' order by var_id;
+
+explain 
+select * from public_1.variant_files var where var.chrom = '2' and var.start_pos between 11007658 and 11027658 and var.end_pos between 11007658 and 11027658
+and var.chunk_id = '2_11' order by var_id;
 
 select
 var.*,

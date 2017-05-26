@@ -54,8 +54,6 @@ for i in range(0, numRuns):
         query = {"chr": chromosome, "start": {"$gt": startFirstPos, "$lte": startFirstPos + step},
                  "end": {"$gte": startFirstPos, "$lt": endLastPos}}
         resultList = list(mongoProdCollHandle_2.find(query, {"_id":1, "chr": 1, "start": 1, "end" : 1, "type": 1, "len": 1, "ref": 1, "alt": 1}).sort([("chr", pymongo.ASCENDING), ("start", pymongo.ASCENDING)]))
-        startFirstPos += step
-        endFirstPos += step
         endTime = datetime.datetime.now()
         duration = (endTime - startTime).total_seconds()
         mongoCumulativeExecTime += duration
@@ -150,4 +148,5 @@ for i in range(0, numRuns):
 print("Average Citus Execution time:{0}".format(citusCumulativeExecTime/numRuns))
 print("Average Mongo Execution time:{0}".format(mongoCumulativeExecTime/numRuns))
 
+mongoProdClient.close()
 postgresConnHandle.close()
