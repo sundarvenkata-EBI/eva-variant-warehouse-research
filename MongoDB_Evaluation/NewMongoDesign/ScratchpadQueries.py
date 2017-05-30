@@ -13,12 +13,12 @@ mongoDevDBHandle = mongoDevClient["admin"]
 mongoDevDBHandle.authenticate(os.environ["MONGODEV_UNAME"], os.environ["MONGODEV_PASS"])
 mongoDevDBHandle = mongoDevClient["eva_testing"]
 
-mongoProdClient = MongoClient(guiutils.promptGUIInput("Host", "Host"))
+mongoProdClient = MongoClient("mongodb://{0}".format(os.environ["MONGO_PROD_INSTANCES"]))
 mongoProdUname = guiutils.promptGUIInput("User", "User")
 mongoProdPwd = guiutils.promptGUIInput("Pass", "Pass", "*")
 mongoProdDBHandle = mongoProdClient["admin"]
 mongoProdDBHandle.authenticate(mongoProdUname, mongoProdPwd)
-mongoProdDBHandle = mongoProdClient["eva_hsapiens_grch37"]
+mongoProdDBHandle = mongoProdClient.get_database("eva_hsapiens_grch37", read_preference= pymongo.ReadPreference.SECONDARY_PREFERRED, read_concern=pymongo.read_concern.ReadConcern(level="local"))
 
 mongoProdCollHandle = mongoProdDBHandle["variants_1_1"]
 mongoProdCollHandle_2 = mongoProdDBHandle["variants_1_2"]
@@ -106,17 +106,35 @@ for i in range(0, numRuns):
     cumulativeExecTime += ((endTime - startTime).total_seconds())
 print("Average Execution time:{0}".format(cumulativeExecTime/numRuns))
 
-def getScanResults(mongoHandle, chromosome, startFirstPos, startLastPos, step, endLastPos)
+def getScanResults(chromosome, startFirstPos, step, endLastPos):
+    localMongoProdClient = MongoClient("mongodb://{0}".format(os.environ["MONGO_PROD_INSTANCES"]))
+    localMongoProdDBHandle = localMongoProdClient["admin"]
+    localMongoProdDBHandle.authenticate(mongoProdUname, mongoProdPwd)
+    localMongoProdDBHandle = localMongoProdClient.get_database("eva_hsapiens_grch37",
+                                                     read_preference=pymongo.ReadPreference.SECONDARY_PREFERRED,
+                                                     read_concern=pymongo.read_concern.ReadConcern(level="local"))
+    localMongoProdCollHandle = localMongoProdDBHandle["variants_1_2"]
+
+    query = {"chr": chromosome, "start": {"$gt": startFirstPos, "$lte": startFirstPos + step},
+             "end": {"$gte": startFirstPos, "$lt": endLastPos}}
+    localStartTime = datetime.datetime.now()
+    resultList = list(localMongoProdCollHandle.find(query).sort([("chr", pymongo.ASCENDING), ("start", pymongo.ASCENDING)]))
+    localEndTime = datetime.datetime.now()
+    localDuration = (localEndTime - localStartTime).total_seconds()
+    print("Mongo: Returned {0} records in {1} seconds".format(len(resultList), localDuration))
+    print("****************")
+    localMongoProdClient.close()
+    return resultList
 
 # Execution times for Mongo Multi Scan - Parallel processing
 numRuns = 30
 citusCumulativeExecTime = 0
 mongoCumulativeExecTime = 0
 margin = 1000000
-numChrom = 26
+numChrom = 24
 print("Start Time for multi-scan:{0}".format(datetime.datetime.now()))
 for i in range(0, numRuns):
-    currChrom = chromosome_LB_UB_Map[random.randint(0, numChrom)]
+    currChrom = chromosome_LB_UB_Map[random.randint(0, numChrom-1)]
     minChromPos = currChrom["minStart"]
     maxChromPos = currChrom["maxStart"]
     chromosome = currChrom["_id"]
@@ -127,18 +145,18 @@ for i in range(0, numRuns):
     startLastPos = pos + margin
     endFirstPos = pos
     endLastPos = pos + margin + margin
+    processList = []
+    startTime = datetime.datetime.now()
     while(True):
-        startTime = datetime.datetime.now()
-        query = {"chr": chromosome, "start": {"$gt": startFirstPos, "$lte": startFirstPos + step},
-                 "end": {"$gte": startFirstPos, "$lt": endLastPos}}
-        resultList = list(mongoProdCollHandle_2.find(query).sort([("chr", pymongo.ASCENDING), ("start", pymongo.ASCENDING)]))
-        endTime = datetime.datetime.now()
-        duration = (endTime - startTime).total_seconds()
-        mongoCumulativeExecTime += duration
-        print("Mongo: Returned {0} records in {1} seconds".format(len(resultList), duration))
-        print("****************")
+        processList.append(Process(target=getScanResults, args=(chromosome, startFirstPos, step, endLastPos)))
         startFirstPos += step
         endFirstPos += step
         if (startFirstPos >= startLastPos) or (endFirstPos >= endLastPos): break
-print("Average Citus Execution time:{0}".format(citusCumulativeExecTime/numRuns))
+    for process in processList:
+        process.start()
+    for process in processList:
+        process.join()
+    endTime = datetime.datetime.now()
+    duration = (endTime - startTime).total_seconds()
+    mongoCumulativeExecTime += duration
 print("Average Mongo Execution time:{0}".format(mongoCumulativeExecTime/numRuns))
