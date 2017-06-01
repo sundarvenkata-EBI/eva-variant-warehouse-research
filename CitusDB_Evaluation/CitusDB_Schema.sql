@@ -1,39 +1,27 @@
-﻿create type public_1.annot_obj as (
-    ct_grp_id varchar(50)
+﻿SELECT run_command_on_workers($cmd$ alter user postgres set citus.shard_max_size='10GB'; $cmd$);
+SELECT run_command_on_workers($cmd$ show citus.shard_max_size; $cmd$);
+drop table public_1.variant;
+create table public_1.variant
+(
+var_id char(60),
+chunk_id varchar(10),
+chrom varchar(10),
+start_pos bigint,
+end_pos bigint,
+var_len integer,
+var_ref text,
+var_alt text,
+var_type varchar(10),
+ids varchar(100)[],
+hgvs jsonb,
+ct_so smallint[],
+ct_sift_min decimal(18,8),
+ct_sift_max decimal(18,8),
+ct_pphen_min decimal(18,8),
+ct_pphen_max decimal(18,8),
+ct_xref text[]
 );
-
-create type public_1.hgv as (
-    hgv_type varchar(50),
-    hgv_name varchar(50)
-);
-
-create table public_1.hgv_arrays (
-hgv_arr public_1.hgv []
-);
-
-insert into public_1.hgv_arrays values (array[row('genomic','x:g.10020864c>t')::public_1.hgv,row('some other','other name')::public_1.hgv])
-insert into public_1.hgv_arrays values ('{}');
-
-select hgv_arr[2] from public_1.hgv_arrays ;
-
-
-create table public_1.char_arr (
-char_arr varchar(30) []
-);
-insert into public_1.char_arr values ('{value1, value2}');
-
-
-
-create table public_1.variant_sample_attrs (
-    var_id text,
-    sample_index smallint,
-    genotype varchar(5),
-    rng_start smallint,
-    rng_end smallint,
-    norng_index smallint,
-    default_marker smallint
-);
-
+select create_distributed_table('public_1.variant', 'chunk_id');
 
 drop table public_1.variant_sample;
 create table public_1.variant_sample
@@ -48,7 +36,7 @@ genotype varchar(5),
 tot_num_samp integer,
 sample_index_bits bit varying(1000000)
 );
-select create_distributed_table('public_1.variant_sample', 'chunk_id');
+select create_distributed_table('public_1.variant_sample', 'chunk_id', colocate_with => 'public_1.variant');
 
 drop table public_1.variant_files;
 create table public_1.variant_files
@@ -65,7 +53,7 @@ attrs jsonb,
 fm varchar(10),
 src bytea 
 );
-select create_distributed_table('public_1.variant_files', 'chunk_id');
+select create_distributed_table('public_1.variant_files', 'chunk_id', colocate_with => 'public_1.variant');
 
 drop table public_1.variant_annot;
 create table public_1.variant_annot
@@ -89,31 +77,9 @@ sift_desc text,
 pphen_sc decimal(18,10),
 pphen_desc text
 );
-select create_distributed_table('public_1.variant_annot', 'chunk_id');
+select create_distributed_table('public_1.variant_annot', 'chunk_id', colocate_with => 'public_1.variant');
 
-drop table public_1.variant;
-create table public_1.variant
-(
-var_id char(60),
-chunk_id varchar(10),
-chrom varchar(10),
-start_pos bigint,
-end_pos bigint,
-var_len integer,
-var_ref text,
-var_alt text,
-var_type varchar(10),
-ids varchar(100)[],
-hgvs jsonb,
-ct_so smallint[],
-ct_sift_min decimal(18,8),
-ct_sift_max decimal(18,8),
-ct_pphen_min decimal(18,8),
-ct_pphen_max decimal(18,8),
-ct_xref text[]
-);
-select create_distributed_table('public_1.variant', 'chunk_id');
-set citus.shard_max_size to '30720MB';
+
 
 select count(*) from public_1.variant;
 select count(*) from public_1.variant_files;
@@ -144,10 +110,10 @@ select *
  where shardid = (
    select get_shard_id_for_distribution_column('public_1.variant', '1_000227471340_000227471340')
  );
-select pg_size_pretty(citus_table_size('public_1.variant_annot')); --16GB for 23M records
-select pg_size_pretty(citus_table_size('public_1.variant_files')); --15GB for 23M records
-select pg_size_pretty(citus_table_size('public_1.variant_sample')); --32GB for 23M records
-select pg_size_pretty(citus_table_size('public_1.variant')); --7GB for 23M records
+select pg_size_pretty(citus_table_size('public_1.variant_annot')); --28GB for 40M records
+select pg_size_pretty(citus_table_size('public_1.variant_files')); --31GB for 40M records
+select pg_size_pretty(citus_table_size('public_1.variant_sample')); --61GB for 40M records
+select pg_size_pretty(citus_table_size('public_1.variant')); --13GB for 40M records
 select chrom from public_1.variant group by 1;
 select chrom from public_1.ct group by 1;
 explain select * from public_1.variant where var_id = '21_000048119868_000048119868';
@@ -157,9 +123,18 @@ select count(*) from public_1.ct;
 select count(*) from public_1.variant where chrom = 'x';
 db.variant_chr21_1_1.find({"chr": "21", "start": 9411413, "ref": "t"});
 select count(*) from public_1.hgv;
+analyze public_1.variant(var_id);
 analyze public_1.variant(chrom);
 analyze public_1.variant(start_pos);
 analyze public_1.variant(end_pos);
+analyze public_1.variant(chunk_id);
+
+analyze public_1.variant_files(var_id);
+analyze public_1.variant_files(chrom);
+analyze public_1.variant_files(start_pos);
+analyze public_1.variant_files(end_pos);
+analyze public_1.variant_files(chunk_id);
+
 create index chr_start_end on public_1.variant(chrom, start_pos, end_pos);
 create index chr_1 on public_1.variant(chrom);
 create index start_1 on public_1.variant(start_pos);
@@ -233,7 +208,7 @@ create index var_id_idx_ct_b on public_1.ct using btree (var_id);
 select master_modify_multiple_shards('drop index public_1.chrom_idx_b');
 explain select * from public_1.variant where chrom = '19' limit 100;
 
-cluster public_1.variant using var_id_idx_b;
+cluster verbose public_1.variant using var_id_idx_b;
 cluster public_1.variant_files using var_id_idx_vf;
 cluster verbose public_1.variant_sample using var_id_idx_vs;
 
@@ -308,6 +283,7 @@ explain select * from public_1.variant_files where VAR_ID like '22%' limit 100;
 explain select * from public_1.variant_sample where VAR_ID like '22%' limit 100;
 select * from public_1.variant_files limit 10;
 
+show citus.task_executor_type;
 set citus.task_executor_type to "real-time";
 set citus.task_executor_type to "task-tracker";
 explain
@@ -336,13 +312,13 @@ left join
 public_1.variant_files varf on varf.VAR_ID = var.VAR_ID and varf.chunk_id = var.chunk_id 
 and varf.chrom = var.chrom and varf.start_pos = var.start_pos and varf.end_pos = var.end_pos
 where var.chrom = '2' and var.start_pos between 11007658 and 11027658 and var.end_pos between 11007658 and 11027658 and var.chunk_id = '2_11'
-order by var_id;
+order by var_id, sample_index;
 
-explain 
-select * from public_1.variant var where var.chrom = '2' and var.start_pos between 11007658 and 11027658 and var.end_pos between 11007658 and 11027658
-and var.chunk_id = '2_11' order by var_id;
+explain analyze
+select var_id, chrom, start_pos, end_pos, var_len, var_ref,var_alt, var_type,ids,hgvs from public_1.variant var where var.chrom = '2' and var.start_pos between 11007658 and 11207658 and var.end_pos between 11007658 and 11207658
+and var.chunk_id = '2_11' order by var_id collate "C";
 
-explain 
+explain analyze
 select * from public_1.variant_files var where var.chrom = '2' and var.start_pos between 11007658 and 11027658 and var.end_pos between 11007658 and 11027658
 and var.chunk_id = '2_11' order by var_id;
 
@@ -388,3 +364,27 @@ select master_modify_multiple_shards('update public_1.variant_files set END_POS 
 select * from pg_catalog.pg_dist_shard_placement order by shardid;
 
 select CHROM from public_1.variant group by 1;
+
+reset work_mem;
+show work_mem;
+set work_mem to '40MB';
+
+select column_name, data_type, character_maximum_length
+from INFORMATION_SCHEMA.COLUMNS where table_name = 'variant';
+show citus.explain_all_tasks;
+set citus.explain_all_tasks = 1;
+
+show shared_buffers;
+set shared_buffers to '6024MB';
+
+SELECT run_command_on_workers($cmd$ set work_mem to '400MB'; $cmd$);
+SELECT run_command_on_workers($cmd$ alter user postgres set work_mem='400MB'; $cmd$);
+SELECT run_command_on_workers($cmd$ show work_mem; $cmd$);
+
+
+select run_command_on_shards(
+    'public_1.variant',
+    $cmd$
+      cluster public_1.%I using var_id_idx_b;
+    $cmd$
+  );
