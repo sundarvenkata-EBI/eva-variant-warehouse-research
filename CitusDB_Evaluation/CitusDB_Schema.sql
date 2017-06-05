@@ -3,7 +3,7 @@ SELECT run_command_on_workers($cmd$ show citus.shard_max_size; $cmd$);
 drop table public_1.variant;
 create table public_1.variant
 (
-var_id char(60),
+var_id char(62),
 chunk_id varchar(10),
 chrom varchar(10),
 start_pos bigint,
@@ -26,7 +26,7 @@ select create_distributed_table('public_1.variant', 'chunk_id');
 drop table public_1.variant_sample;
 create table public_1.variant_sample
 (
-var_id char(60),
+var_id char(62),
 chunk_id varchar(10),
 chrom varchar(10),
 start_pos bigint,
@@ -41,7 +41,7 @@ select create_distributed_table('public_1.variant_sample', 'chunk_id', colocate_
 drop table public_1.variant_files;
 create table public_1.variant_files
 (
-var_id char(60),
+var_id char(62),
 chunk_id varchar(10),
 chrom varchar(10),
 start_pos bigint,
@@ -58,7 +58,7 @@ select create_distributed_table('public_1.variant_files', 'chunk_id', colocate_w
 drop table public_1.variant_annot;
 create table public_1.variant_annot
 (
-var_id char(60),
+var_id char(62),
 chunk_id varchar(10),
 chrom varchar(10),
 start_pos bigint,
@@ -78,8 +78,6 @@ pphen_sc decimal(18,10),
 pphen_desc text
 );
 select create_distributed_table('public_1.variant_annot', 'chunk_id', colocate_with => 'public_1.variant');
-
-
 
 select count(*) from public_1.variant;
 select count(*) from public_1.variant_files;
@@ -103,7 +101,7 @@ select master_modify_multiple_shards('delete from public_1.variant');
 select master_modify_multiple_shards('delete from public_1.variant_annot');
 select master_modify_multiple_shards('delete from public_1.variant_files');
 select master_modify_multiple_shards('delete from public_1.variant_sample');
-delete from public_1.reg_chrom ;
+delete from public_1.reg_chrom where chrom <> '10';
 
 select *
   from pg_dist_shard_placement
@@ -388,3 +386,6 @@ select run_command_on_shards(
       cluster public_1.%I using var_id_idx_b;
     $cmd$
   );
+
+create table public.variant_copy as select * from public_1.variant;
+select * from public.variant_copy;
