@@ -297,7 +297,7 @@ left join
 public_1.variant_files varf on varf.VAR_ID = var.VAR_ID and var.VAR_ID between 'X_000003800000_000003800000_00000000000000000000000000000000          ' and 'X_000003801000_000003901000_00000000000000000000000000000000          ' 
 and varf.VAR_ID between 'X_000003800000_000003800000_00000000000000000000000000000000          ' and 'X_000003801000_000003801000_00000000000000000000000000000000          ';
 
-explain
+explain analyze
 select
 var.*,
 varf.sample_index,
@@ -309,8 +309,20 @@ public_1.variant var
 left join 
 public_1.variant_files varf on varf.VAR_ID = var.VAR_ID and varf.chunk_id = var.chunk_id 
 and varf.chrom = var.chrom and varf.start_pos = var.start_pos and varf.end_pos = var.end_pos
-where var.chrom = '2' and var.start_pos between 11007658 and 11027658 and var.end_pos between 11007658 and 11027658 and var.chunk_id = '2_11'
+where var.chrom = '2' and var.start_pos between 226462 and 426462 and var.end_pos between 226462 and 426462 and var.chunk_id = '2_0'
 order by var_id, sample_index;
+
+explain analyze
+select
+var.*,
+vars.*
+from
+public_1.variant var
+left join 
+public_1.variant_sample vars on vars.VAR_ID = var.VAR_ID and vars.chunk_id = var.chunk_id 
+and vars.chrom = var.chrom and vars.start_pos = var.start_pos and vars.end_pos = var.end_pos
+where var.chrom = '2' and var.start_pos between 226462 and 246462 and var.end_pos between 226462 and 246462 and var.chunk_id = '2_0'
+order by var.var_id, vars.sample_index;
 
 explain analyze
 select var_id, chrom, start_pos, end_pos, var_len, var_ref,var_alt, var_type,ids,hgvs from public_1.variant var where var.chrom = '2' and var.start_pos between 11007658 and 11207658 and var.end_pos between 11007658 and 11207658
@@ -361,7 +373,7 @@ select master_modify_multiple_shards('update public_1.variant_files set END_POS 
 
 select * from pg_catalog.pg_dist_shard_placement order by shardid;
 
-select CHROM from public_1.variant group by 1;
+select CHROM from public_1.variant group by 1 order by 1;
 
 reset work_mem;
 show work_mem;
@@ -375,9 +387,13 @@ set citus.explain_all_tasks = 1;
 show shared_buffers;
 set shared_buffers to '6024MB';
 
+show effective_cache_size;
+
 SELECT run_command_on_workers($cmd$ set work_mem to '400MB'; $cmd$);
 SELECT run_command_on_workers($cmd$ alter user postgres set work_mem='400MB'; $cmd$);
 SELECT run_command_on_workers($cmd$ show work_mem; $cmd$);
+SELECT run_command_on_workers($cmd$ show shared_buffers; $cmd$);
+SELECT run_command_on_workers($cmd$ show effective_cache_size; $cmd$);
 
 
 select run_command_on_shards(
@@ -389,3 +405,4 @@ select run_command_on_shards(
 
 create table public.variant_copy as select * from public_1.variant;
 select * from public.variant_copy;
+delete from public.variant_copy;

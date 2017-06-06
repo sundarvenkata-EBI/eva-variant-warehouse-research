@@ -59,3 +59,15 @@ db.variant_chr21_1_1_sample_mod.find({$and: [{"chr": "21"}, {"start": 9411413}, 
   }
 ]})
 
+//Queries to get variants from multiple phases of the 1000 Genome study
+query = {"sname":/^1000 Genomes/};
+db.files_1_2.distinct("sid", query);
+db.variants_1_2.find({"files.sname":"/^1000 Genomes/"});
+
+db.variants_1_2.find({"files.sid": {$in: ["PRJEB6930","PRJEB4019"]}}).sort({"_id":1});
+
+//Variants exclusive to 1000 Genomes Phase 1
+db.variants_1_2.find({$and: [{"files.sid": "PRJEB4019"}, {"files.sid": {$ne: "PRJEB6930"}}]}).sort({"chr":1, "start":1});
+//Variants exclusive to 1000 Genomes Phase 3
+db.variants_1_2.find({$and: [{"files.sid": "PRJEB6930"}, {"files.sid": {$ne: "PRJEB4019"}}]}).sort({"chr":1, "start":1});
+
