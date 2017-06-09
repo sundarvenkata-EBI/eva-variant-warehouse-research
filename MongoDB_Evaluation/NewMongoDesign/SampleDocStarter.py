@@ -1,4 +1,5 @@
 import socket, fcntl, struct
+import traceback
 
 from pyspark import SparkConf, SparkContext
 from pymongo import MongoClient
@@ -48,49 +49,59 @@ def binencode(sampleIndexSet, numSamp):
     return resultArray
 
 def processVariantDoc(chromosome, lowerBound, upperBound, srcCollHandle_grch37, unencoded_resultCollHandle, encoded_resultCollHandle):
-    # print("Starting write for:{0},{1},{2}".format(chromosome, lowerBound, upperBound))
-    query = {"chr": chromosome, "start": {"$gte": lowerBound, "$lt": upperBound}, "files.samp": {"$exists": "true"}}
-    results = srcCollHandle_grch37.find(query, {"files.samp":1, "files.fid":1,"files.sid":1}).limit(100)
-    for variantDoc in results:
-        originalDoc = copy.deepcopy(variantDoc)
-        filesDocs = variantDoc["files"]
-        filesDocIndex = 0
-        for filesDoc in filesDocs:
-            if ("fid" not in filesDoc) or ("sid" not in filesDoc): continue
-            fid = filesDoc["fid"]
-            sid = filesDoc["sid"]
-            fileCache = filesCacheLookup[fid + "_" + sid]
-            if ("st" not in fileCache) or ("samp" not in fileCache): continue
-            numSamp = fileCache["st"]["nSamp"]
-            sampleDoc = filesDoc["samp"]
-            defaultGenotypeSampleSet = set(range(0,numSamp))
-            defaultGenotype = None
-            for sampleKey in sampleDoc:
-                if sampleKey == "def":
-                    defaultGenotype = sampleDoc[sampleKey]
-                else:
-                    sampleIndexSet = set(sampleDoc[sampleKey])
-                    defaultGenotypeSampleSet = defaultGenotypeSampleSet - sampleIndexSet
-                    sampleDoc[sampleKey] = binencode(sampleIndexSet, numSamp)
-            del sampleDoc["def"]
-            sampleDoc[defaultGenotype] = binencode(defaultGenotypeSampleSet, numSamp)
-            filesDoc["samp"] = sampleDoc
-            filesDocs[filesDocIndex] = filesDoc
-            originalFilesDocIndex = 0
-            while True:
-                if originalDoc["files"][originalFilesDocIndex]["fid"] == fid and originalDoc["files"][originalFilesDocIndex]["sid"] == sid:
-                    if "def" in originalDoc["files"][originalFilesDocIndex]["samp"]:
-                        del originalDoc["files"][originalFilesDocIndex]["samp"]["def"]
-                    originalDoc["files"][originalFilesDocIndex]["samp"][defaultGenotype] = convertNumberArrayToRange(defaultGenotypeSampleSet)
-                    break
-                originalFilesDocIndex += 1
-            filesDocIndex += 1
+    try:
+        #print("Starting write for:{0},{1},{2}".format(chromosome, lowerBound, upperBound))
+        #bulkWriteListOrig = []
+        bulkWriteListMod = []
+        query = {"chr": chromosome, "start": {"$gte": lowerBound, "$lt": upperBound}, "end": {"$gte": lowerBound}, "files.samp": {"$exists": "true"}}
+        results = srcCollHandle_grch37.find(query, {"files":1, "chr":1, "start":1, "end":1})
+        for variantDoc in results:
+            #originalDoc = copy.deepcopy(variantDoc)
+            filesDocs = variantDoc["files"]
+            filesDocIndex = 0
+            for filesDoc in filesDocs:
+                if ("fid" not in filesDoc) or ("sid" not in filesDoc): continue
+                fid = filesDoc["fid"]
+                sid = filesDoc["sid"]
+                if fid + "_" + sid not in filesCacheLookup: continue
+                fileCache = filesCacheLookup[fid + "_" + sid]
+                if ("st" not in fileCache) or ("samp" not in fileCache): continue
+                numSamp = fileCache["st"]["nSamp"]
+                if "samp" in filesDoc:
+                    sampleDoc = filesDoc["samp"]
+                    defaultGenotypeSampleSet = set(range(0,numSamp))
+                    defaultGenotype = None
+                    for sampleKey in sampleDoc:
+                        if sampleKey == "def":
+                            defaultGenotype = sampleDoc[sampleKey]
+                        else:
+                            sampleIndexSet = set(sampleDoc[sampleKey])
+                            defaultGenotypeSampleSet = defaultGenotypeSampleSet - sampleIndexSet
+                            sampleDoc[sampleKey] = binencode(sampleIndexSet, numSamp)
+                    del sampleDoc["def"]
+                    sampleDoc[defaultGenotype] = binencode(defaultGenotypeSampleSet, numSamp)
+                    filesDoc["samp"] = sampleDoc
+                    filesDocs[filesDocIndex] = filesDoc
+                    # originalFilesDocIndex = 0
+                    # while True:
+                    #     if originalDoc["files"][originalFilesDocIndex]["fid"] == fid and originalDoc["files"][originalFilesDocIndex]["sid"] == sid:
+                    #         if "samp" in originalDoc["files"][originalFilesDocIndex]:
+                    #             if "def" in originalDoc["files"][originalFilesDocIndex]["samp"]:
+                    #                 del originalDoc["files"][originalFilesDocIndex]["samp"]["def"]
+                    #             originalDoc["files"][originalFilesDocIndex]["samp"][defaultGenotype] = convertNumberArrayToRange(defaultGenotypeSampleSet)
+                    #         break
+                    #     originalFilesDocIndex += 1
+                    # filesDocIndex += 1
 
+            #bulkWriteListOrig.append(originalDoc)
+            variantDoc["files"] = filesDocs
+            bulkWriteListMod.append(variantDoc)
 
-        unencoded_resultCollHandle.insert(originalDoc)
-        variantDoc["files"] = filesDocs
-        encoded_resultCollHandle.insert(variantDoc)
-    # print("Finished write for:{0},{1},{2}".format(chromosome, lowerBound, upperBound))
+        #if bulkWriteListOrig: unencoded_resultCollHandle.insert_many(bulkWriteListOrig)
+        if bulkWriteListMod: encoded_resultCollHandle.insert_many(bulkWriteListMod)
+        #print("Finished write for:{0},{1},{2}".format(chromosome, lowerBound, upperBound))
+    except Exception:
+        traceback.print_exc()
 
 def sampleSubDocUpdate(devMongoHost, (mongoProdHost, mongoProdUser, mongoProdPwd), chromosome, lowerBound, upperBound, filesCacheLookup):
     devMongoClient = MongoClient(devMongoHost)
@@ -101,8 +112,8 @@ def sampleSubDocUpdate(devMongoHost, (mongoProdHost, mongoProdUser, mongoProdPwd
     prodMongoHandle = prodClient["eva_hsapiens_grch37"]
     srcCollHandle_grch37 = prodMongoHandle["variants_1_2"]
 
+    encoded_resultCollHandle = devMongoClient["eva_testing"]["sample_enc"]
     unencoded_resultCollHandle = devMongoClient["eva_testing"]["sample_unenc_small"]
-    encoded_resultCollHandle = devMongoClient["eva_testing"]["sample_enc_small"]
 
     # numEncTimes = 0
     # cumExecTime = 0
@@ -120,6 +131,7 @@ def sampleSubDocUpdate(devMongoHost, (mongoProdHost, mongoProdUser, mongoProdPwd
             procArray[procKey].join()
         lowerBound += chunkSize
 
+    print("Completed all threads!")
     devMongoClient.close()
     prodClient.close()
 # devmongoClient = MongoClient(os.environ["MONGODEV_INSTANCE"])
@@ -175,6 +187,6 @@ chromosome_LB_UB_Map = [{ "_id" : "1", "minStart" : 10020, "maxStart" : 24924060
 conf = SparkConf().setMaster("spark://172.22.69.141:7077").setAppName("MongoTest")
 sc = SparkContext(conf=conf)
 sc.setLogLevel("INFO")
-chromosome_entries = sc.parallelize(chromosome_LB_UB_Map, 8)
+chromosome_entries = sc.parallelize(chromosome_LB_UB_Map[0:10], 10)
 chromosome_entries.map(lambda entry: sampleSubDocUpdate("172.22.69.141", (mongoProdHost, mongoProdUser, mongoProdPwd), entry["_id"], entry["minStart"], entry["maxStart"], filesCacheLookup)).collect()
 sc.stop()

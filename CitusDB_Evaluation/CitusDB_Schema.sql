@@ -193,14 +193,27 @@ select master_modify_multiple_shards('delete from public_1.ct where var_id like 
 create index chrom_idx_b on public_1.variant using btree (chrom);
 create index start_idx_b on public_1.variant using btree (start_pos);
 create index end_idx_b on public_1.variant using btree (end_pos);
+create index chunk_idx_b on public_1.variant using btree (chunk_id);
 
 create index chrom_idx_vf on public_1.variant_files using btree (chrom);
 create index start_idx_vf on public_1.variant_files using btree (start_pos);
 create index end_idx_vf on public_1.variant_files using btree (end_pos);
+create index chunk_idx_vf on public_1.variant_files using btree (chunk_id);
+
+create index chrom_idx_va on public_1.variant_annot using btree (chrom);
+create index start_idx_va on public_1.variant_annot using btree (start_pos);
+create index end_idx_va on public_1.variant_annot using btree (end_pos);
+create index chunk_idx_va on public_1.variant_annot using btree (chunk_id);
+
+create index chrom_idx_vs on public_1.variant_sample using btree (chrom);
+create index start_idx_vs on public_1.variant_sample using btree (start_pos);
+create index end_idx_vs on public_1.variant_sample using btree (end_pos);
+create index chunk_idx_vs on public_1.variant_sample using btree (chunk_id);
 
 create index var_id_idx_b on public_1.variant using btree (var_id);
 create index var_id_idx_vf on public_1.variant_files using btree (var_id);
 create index var_id_idx_vs on public_1.variant_sample using btree (var_id);
+create index var_id_idx_va on public_1.variant_annot using btree (var_id);
 
 create index var_id_idx_ct_b on public_1.ct using btree (var_id);
 select master_modify_multiple_shards('drop index public_1.chrom_idx_b');
@@ -406,3 +419,7 @@ select run_command_on_shards(
 create table public.variant_copy as select * from public_1.variant;
 select * from public.variant_copy;
 delete from public.variant_copy;
+
+SELECT * FROM pg_catalog.pg_dist_shard;
+SELECT nodename, nodeport, shardid FROM pg_dist_shard 
+JOIN pg_dist_shard_placement USING (shardid) WHERE logicalrelid = 'public_1.variant'::regclass

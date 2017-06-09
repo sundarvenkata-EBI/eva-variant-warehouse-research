@@ -136,6 +136,8 @@ select * from public.ws_traffic_useful_cols where request_ts = '2015-04-21 14:30
 
 select * from public.ws_traffic_useful_cols order by bytes_out desc;
 
+select * from public.ws_traffic_useful_cols where client_ip = '10.3.0.97';
+
 select * from public.ws_traffic_useful_cols where user_agent like 'libwww-perl%' order by request_ts desc;
 --High frequency users of the web service
 select client_ip, count(*) as NUM_HITS from public.ws_traffic_useful_cols group by 1 order by 2 desc;
@@ -144,7 +146,7 @@ select client_ip, sum(bytes_out) as TOT_BYTES_OUT from public.ws_traffic_useful_
 --Are consumers of the web service consciously adopting the usage of source entries exclusion? - No discernible trend
 select client_ip, trim(cast(extract(year from request_ts) as VARCHAR(10))) || lpad(trim(cast(extract(month from request_ts) as VARCHAR(10))),2,'0') as MTH,
 	count(*) from public.ws_traffic_useful_cols
-WHERE request_query like '%exclude=sourceEntries%' and request_ts >= '2015-04-21 14:30:28.000000'
+WHERE request_query like '%exclude=sourceEntries%' and request_ts >= '2015-04-21 14:30:28.000000' and user_agent not like 'Mozilla%'
  group by 1,2 order by 1,2 ;
 
 select avg(bytes_out), avg(duration) from public.ws_traffic_useful_cols where request_uri_path like '%/segments/%' and
@@ -169,3 +171,33 @@ show CLIENT_ENCODING ;
 set CLIENT_ENCODING  to 'latin1';
 
 select * from ws_traffic_useful_cols where request_uri_path like '%segments%' and request_uri_path like '%contig%' ;
+
+select client_ip, trim(cast(extract(year from request_ts) as VARCHAR(10))) || lpad(trim(cast(extract(month from request_ts) as VARCHAR(10))),2,'0') as MTH,a.*
+from public.ws_traffic_useful_cols a WHERE client_ip = '10.3.0.97' and request_query like '%exclude=sourceEntries%' and request_ts >= '2015-04-21 14:30:28.000000' and user_agent not like 'Mozilla%'
+order by 1,2;
+
+--What is the average segment length requested, duration of service for web service range requests made from non-interactive
+--clients (WormBase, Parasite, wget etc.,)?
+select client_ip, trim(cast(extract(year from request_ts) as VARCHAR(10))) || lpad(trim(cast(extract(month from request_ts) as VARCHAR(10))),2,'0') as MTH,avg(a.seg_len) as seg_len_avg, avg(a.duration) as duration_avg
+from public.ws_traffic_useful_cols a WHERE request_uri_path like '%/segments/%' and request_query not like '%exclude=sourceEntries%' and request_ts >= '2015-04-21 14:30:28.000000' and user_agent not like 'Mozilla%'
+group by 1,2 order by 1,2;
+
+select client_ip, trim(cast(extract(year from request_ts) as VARCHAR(10))) || lpad(trim(cast(extract(month from request_ts) as VARCHAR(10))),2,'0') as MTH,a.*
+from public.ws_traffic_useful_cols a WHERE client_ip = '129.67.44.57' and request_uri_path like '%/segments/%' and request_query not like '%exclude=sourceEntries%' and request_ts >= '2015-04-21 14:30:28.000000' and user_agent not like 'Mozilla%'
+order by 1,2;
+
+select client_ip, trim(cast(extract(year from request_ts) as VARCHAR(10))) || lpad(trim(cast(extract(month from request_ts) as VARCHAR(10))),2,'0') as MTH,a.*
+from public.ws_traffic_useful_cols a WHERE client_ip = '129.67.44.120' and request_uri_path like '%/segments/%' and request_query not like '%exclude=sourceEntries%' and request_ts >= '2015-04-21 14:30:28.000000' and user_agent not like 'Mozilla%'
+order by 1,2;
+
+select client_ip, trim(cast(extract(year from request_ts) as VARCHAR(10))) || lpad(trim(cast(extract(month from request_ts) as VARCHAR(10))),2,'0') as MTH,a.*
+from public.ws_traffic_useful_cols a WHERE client_ip = '193.62.202.242' and request_uri_path like '%/segments/%' and request_query not like '%exclude=sourceEntries%' and request_ts >= '2015-04-21 14:30:28.000000' and user_agent not like 'Mozilla%'
+order by 1,2;
+
+select client_ip, trim(cast(extract(year from request_ts) as VARCHAR(10))) || lpad(trim(cast(extract(month from request_ts) as VARCHAR(10))),2,'0') as MTH,avg(a.seg_len) as seg_len_avg, avg(a.duration) as duration_avg
+from public.ws_traffic_useful_cols a WHERE request_uri_path like '%/segments/%' and request_query not like '%exclude=sourceEntries%' and request_ts >= '2015-04-21 14:30:28.000000'
+group by 1,2 order by 1,2;
+
+select client_ip, trim(cast(extract(year from request_ts) as VARCHAR(10))) || lpad(trim(cast(extract(month from request_ts) as VARCHAR(10))),2,'0') as MTH,a.*
+from public.ws_traffic_useful_cols a WHERE client_ip = '131.111.56.122' and request_uri_path like '%/segments/%' and request_query not like '%exclude=sourceEntries%' and request_ts >= '2015-04-21 14:30:28.000000'
+order by 1,2;
