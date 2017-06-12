@@ -43,6 +43,7 @@ def variantSampleJoin(devMongoHost, (mongoProdHost, mongoProdUser, mongoProdPwd)
 
         sampleResultIndex = 0
         for varResult in varResultList:
+            if sampleResultIndex >= numSampleRecords: break
             sampleResult = sampleResultList[sampleResultIndex]
             if varResult["_id"] == sampleResult["_id"]:
                 varResult["sample"] = sampleResult["files"]
@@ -103,7 +104,7 @@ chromosome_LB_UB_Map = [{ "_id" : "1", "minStart" : 10020, "maxStart" : 24924060
     { "_id" : "22", "minStart" : 16050036, "maxStart" : 51244515, "numEntries" : 2172028 },
     { "_id" : "X", "minStart" : 60003, "maxStart" : 155260479, "numEntries" : 5893713 },
     { "_id" : "Y", "minStart" : 10003, "maxStart" : 59363485, "numEntries" : 504508 }]
-entry = chromosome_LB_UB_Map[0]
+entry = chromosome_LB_UB_Map[random.randint(0,23)]
 variantSampleJoin("172.22.69.141", (mongoProdHost, mongoProdUser, mongoProdPwd), entry["_id"], entry["minStart"], entry["maxStart"], filesCacheLookup)
 
 conf = SparkConf().setMaster("spark://172.22.69.141:7077").setAppName("MongoTest")
