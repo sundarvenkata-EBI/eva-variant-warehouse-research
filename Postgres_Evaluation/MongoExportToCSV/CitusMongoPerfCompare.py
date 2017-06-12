@@ -46,7 +46,7 @@ for i in range(0, numRuns):
     maxChromPos = currChrom["maxStart"]
     chromosome = currChrom["_id"]
     pos = random.randint(minChromPos, maxChromPos)
-    # Proxy Query
+
     step = 200000
     startFirstPos = max(pos - margin,0)
     startLastPos = pos + margin
@@ -80,18 +80,19 @@ print("Average Mongo Execution time:{0}".format(mongoCumulativeExecTime/numRuns)
 
 # Execution times for Single Scan
 numRuns = 30
-minChromPos= 2000000
-maxChromPos = 100000000
 citusCumulativeExecTime = 0
 mongoCumulativeExecTime = 0
 margin = 1000000
-chromosome = "1"
+numChrom = chromosome_LB_UB_Map.__len__()
 print("Start Time for single-scan:{0}".format(datetime.datetime.now()))
 for i in range(0, numRuns):
+    currChrom = chromosome_LB_UB_Map[random.randint(0, numChrom-1)]
+    minChromPos = currChrom["minStart"]
+    maxChromPos = currChrom["maxStart"]
+    chromosome = currChrom["_id"]
     pos = random.randint(minChromPos, maxChromPos)
-    # Proxy Query
-    # step = 200000
-    startFirstPos = pos - margin
+
+    startFirstPos = max(pos - margin,0)
     startLastPos = pos + margin
     endFirstPos = pos
     endLastPos = pos + margin + margin
@@ -99,7 +100,7 @@ for i in range(0, numRuns):
     startTime = datetime.datetime.now()
     resultCursor.execute(
         "select * from public_1.variant where chrom = '{0}' and start_pos > {1} and start_pos <= {2} and end_pos >= {3} and end_pos < {4} order by var_id".format(
-            chromosome, startFirstPos, startLastPos, endFirstPos, endLastPos))
+            chromosome, startFirstPos, startLastPos, startFirstPos, endLastPos))
     resultList = resultCursor.fetchall()
     endTime = datetime.datetime.now()
     duration = (endTime - startTime).total_seconds()
@@ -107,74 +108,36 @@ for i in range(0, numRuns):
     print("Citus: Returned {0} records in {1} seconds".format(len(resultList), duration))
 
     startTime = datetime.datetime.now()
-    query = {"chr": chromosome, "start": {"$gt": startFirstPos, "$lte": startLastPos},"end": {"$gte": endFirstPos, "$lt": endLastPos}}
+    query = {"chr": chromosome, "start": {"$gt": startFirstPos, "$lte": startLastPos},
+             "end": {"$gte": startFirstPos, "$lt": endLastPos}}
     resultList = list(mongoProdCollHandle_2.find(query, {"_id":1, "chr": 1, "start": 1, "end" : 1, "type": 1, "len": 1, "ref": 1, "alt": 1}).sort([("chr", pymongo.ASCENDING), ("start", pymongo.ASCENDING)]))
-    # startFirstPos += step
-    # endFirstPos += step
     endTime = datetime.datetime.now()
     duration = (endTime - startTime).total_seconds()
     mongoCumulativeExecTime += duration
     print("Mongo: Returned {0} records in {1} seconds".format(len(resultList), duration))
     print("****************")
+    startFirstPos += step
+    endFirstPos += step
+    if (startFirstPos >= startLastPos) or (endFirstPos >= endLastPos): break
 print("Average Citus Execution time:{0}".format(citusCumulativeExecTime/numRuns))
 print("Average Mongo Execution time:{0}".format(mongoCumulativeExecTime/numRuns))
 
-
-# Execution times for Single Scan with filter on non-indexed field
-numRuns = 30
-minChromPos= 2000000
-maxChromPos = 100000000
+# Execution times for Join
+numRuns = 1
 citusCumulativeExecTime = 0
 mongoCumulativeExecTime = 0
 margin = 1000000
-chromosome = "1"
-print("Start Time for single-scan:{0}".format(datetime.datetime.now()))
+numChrom = chromosome_LB_UB_Map[0:10].__len__()
+print("Start Time for joins:{0}".format(datetime.datetime.now()))
 for i in range(0, numRuns):
+    currChrom = chromosome_LB_UB_Map[random.randint(0, numChrom-1)]
+    minChromPos = currChrom["minStart"]
+    maxChromPos = currChrom["maxStart"]
+    chromosome = currChrom["_id"]
     pos = random.randint(minChromPos, maxChromPos)
-    # Proxy Query
-    # step = 200000
-    startFirstPos = pos - margin
-    startLastPos = pos + margin
-    endFirstPos = pos
-    endLastPos = pos + margin + margin
 
-    startTime = datetime.datetime.now()
-    resultCursor.execute(
-        "select * from public_1.variant where chrom = '{0}' and start_pos > {1} and start_pos <= {2} and end_pos >= {3} and end_pos < {4} and VAR_TYPE = '{5}' order by var_id".format(
-            chromosome, startFirstPos, startLastPos, endFirstPos, endLastPos, "INDEL"))
-    resultList = resultCursor.fetchall()
-    endTime = datetime.datetime.now()
-    duration = (endTime - startTime).total_seconds()
-    citusCumulativeExecTime += duration
-    print("Citus: Returned {0} records in {1} seconds".format(len(resultList), duration))
-
-    startTime = datetime.datetime.now()
-    query = {"chr": chromosome, "start": {"$gt": startFirstPos, "$lte": startLastPos},"end": {"$gte": endFirstPos, "$lt": endLastPos}, "type": "INDEL"}
-    resultList = list(mongoProdCollHandle_2.find(query, {"_id":1, "chr": 1, "start": 1, "end" : 1, "type": 1, "len": 1, "ref": 1, "alt": 1}).sort([("chr", pymongo.ASCENDING), ("start", pymongo.ASCENDING)]))
-    # startFirstPos += step
-    # endFirstPos += step
-    endTime = datetime.datetime.now()
-    duration = (endTime - startTime).total_seconds()
-    mongoCumulativeExecTime += duration
-    print("Mongo: Returned {0} records in {1} seconds".format(len(resultList), duration))
-    print("****************")
-print("Average Citus Execution time:{0}".format(citusCumulativeExecTime/numRuns))
-print("Average Mongo Execution time:{0}".format(mongoCumulativeExecTime/numRuns))
-
-# Execution times for joins in Citus and Mongo
-numRuns = 30
-minChromPos= 2000000
-maxChromPos = 100000000
-citusCumulativeExecTime = 0
-mongoCumulativeExecTime = 0
-margin = 1000000
-chromosome = "1"
-print("Start Time for multi-scan:{0}".format(datetime.datetime.now()))
-for i in range(0, numRuns):
-    pos = random.randint(minChromPos, maxChromPos)
-    # Proxy Query
     step = 200000
-    startFirstPos = pos - margin
+    startFirstPos = max(pos - margin,0)
     startLastPos = pos + margin
     endFirstPos = pos
     endLastPos = pos + margin + margin
@@ -183,85 +146,35 @@ for i in range(0, numRuns):
         resultCursor.execute(
             "select * from public_1.variant where chrom = '{0}' and start_pos > {1} and start_pos <= {2} and end_pos >= {3} and end_pos < {4} order by var_id".format(
                 chromosome, startFirstPos, startFirstPos + step, startFirstPos, endLastPos))
-        resultList = resultCursor.fetchall()
+        varResultList = resultCursor.fetchall()
         resultCursor.execute(
             "select * from public_1.variant_sample where chrom = '{0}' and start_pos > {1} and start_pos <= {2} and end_pos >= {3} and end_pos < {4} order by var_id, sample_index".format(
                 chromosome, startFirstPos, startFirstPos + step, startFirstPos, endLastPos))
-        joinList = resultCursor.fetchall()
-        numJoinResults = len(joinList)
-        finalResultList = {}
-        i = 0
-        for result in resultList:
-            var_id = result[0]
-            if (i >= numJoinResults) or (joinList[i][0] != var_id):
-                finalResultList[var_id] = (result, None)
-            else:
-                j = i + 1
-                while(j<numJoinResults and joinList[j][0] == var_id): j += 1
-                finalResultList[var_id] = (result, joinList[i:j])
-                i = j
+        sampleResultList = resultCursor.fetchall()
+        numSampleResults = len(sampleResultList)
+
+        sampleResultIndex = 0
+        for varResult in varResultList:
+            if sampleResultIndex >= numSampleResults: break
+            sampleResult = sampleResultList[sampleResultIndex]
+            if sampleResult[0] == varResult[0]:
+                while sampleResult[0] == varResult[0]:
+                    varResult = varResult + (sampleResult,)
+                    sampleResultIndex += 1
+                    if sampleResultIndex >= numSampleResults: break
+                    sampleResult = sampleResultList[sampleResultIndex]
+
         endTime = datetime.datetime.now()
         duration = (endTime - startTime).total_seconds()
         citusCumulativeExecTime += duration
-        print("Citus: Returned {0} records in {1} seconds".format(len(resultList), duration))
+        print("Citus: Joined {0} records in {1} seconds".format(len(varResultList), duration))
 
-        # startTime = datetime.datetime.now()
-        # query = {"chr": chromosome, "start": {"$gt": startFirstPos, "$lte": startFirstPos + step},
-        #          "end": {"$gte": startFirstPos, "$lt": endLastPos}}
-        # resultList = list(mongoProdCollHandle_2.find(query, {"_id":1, "chr": 1, "start": 1, "end" : 1, "type": 1, "len": 1, "ref": 1, "alt": 1}).sort([("chr", pymongo.ASCENDING), ("start", pymongo.ASCENDING)]))
-        # endTime = datetime.datetime.now()
-        # duration = (endTime - startTime).total_seconds()
-        # mongoCumulativeExecTime += duration
-        # print("Mongo: Returned {0} records in {1} seconds".format(len(resultList), duration))
-        # print("****************")
-        # startFirstPos += step
-        # endFirstPos += step
-        # if (startFirstPos >= startLastPos) or (endFirstPos >= endLastPos): break
-print("Average Citus Execution time:{0}".format(citusCumulativeExecTime/numRuns))
-print("Average Mongo Execution time:{0}".format(mongoCumulativeExecTime/numRuns))
-
-# Execution times for parallel Multi Scan
-numRuns = 30
-minChromPos= 2000000
-maxChromPos = 100000000
-citusCumulativeExecTime = 0
-mongoCumulativeExecTime = 0
-margin = 1000000
-chromosome = "1"
-print("Start Time for multi-scan:{0}".format(datetime.datetime.now()))
-for i in range(0, numRuns):
-    pos = random.randint(minChromPos, maxChromPos)
-    # Proxy Query
-    step = 200000
-    startFirstPos = pos - margin
-    startLastPos = pos + margin
-    endFirstPos = pos
-    endLastPos = pos + margin + margin
-    while(True):
-        startTime = datetime.datetime.now()
-        resultCursor.execute(
-            "select * from public_1.variant where chrom = '{0}' and start_pos > {1} and start_pos <= {2} and end_pos >= {3} and end_pos < {4} order by var_id".format(
-                chromosome, startFirstPos, startFirstPos + step, startFirstPos, endLastPos))
-        resultList = resultCursor.fetchall()
-        endTime = datetime.datetime.now()
-        duration = (endTime - startTime).total_seconds()
-        citusCumulativeExecTime += duration
-        print("Citus: Returned {0} records in {1} seconds".format(len(resultList), duration))
-
-        startTime = datetime.datetime.now()
-        query = {"chr": chromosome, "start": {"$gt": startFirstPos, "$lte": startFirstPos + step},
-                 "end": {"$gte": startFirstPos, "$lt": endLastPos}}
-        resultList = list(mongoProdCollHandle_2.find(query, {"_id":1, "chr": 1, "start": 1, "end" : 1, "type": 1, "len": 1, "ref": 1, "alt": 1}).sort([("chr", pymongo.ASCENDING), ("start", pymongo.ASCENDING)]))
-        endTime = datetime.datetime.now()
-        duration = (endTime - startTime).total_seconds()
-        mongoCumulativeExecTime += duration
-        print("Mongo: Returned {0} records in {1} seconds".format(len(resultList), duration))
-        print("****************")
         startFirstPos += step
         endFirstPos += step
         if (startFirstPos >= startLastPos) or (endFirstPos >= endLastPos): break
 print("Average Citus Execution time:{0}".format(citusCumulativeExecTime/numRuns))
 print("Average Mongo Execution time:{0}".format(mongoCumulativeExecTime/numRuns))
 
-mongoProdClient.close()
+
 postgresConnHandle.close()
+mongoProdClient.close()

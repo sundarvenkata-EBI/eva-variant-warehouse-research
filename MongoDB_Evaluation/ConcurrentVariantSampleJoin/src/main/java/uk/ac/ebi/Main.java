@@ -70,14 +70,14 @@ public class Main {
         MongoCollection variantCollHandle = prodMongoClient.getDatabase("eva_hsapiens_grch37").getCollection("variants_1_2");
         MongoCollection sampleCollHandle = localMongoClient.getDatabase("eva_testing").getCollection("sample_enc");
 
-        String chromosome = "10";
+        String chromosome = "19";
         int numScans = 0;
         int totalNumRecords = 0;
         int mongoCumulativeExecTime = 0;
         int margin = 1000000;
         Random random = new Random();
-        int lowerBound = 60222;
-        int upperBound = 135524743;
+        int lowerBound = 60360;
+        int upperBound = 59118925;
         int pos =  random.nextInt (upperBound - lowerBound) + lowerBound;
         int step = 20000;
         int endLastPos = pos + margin + margin;

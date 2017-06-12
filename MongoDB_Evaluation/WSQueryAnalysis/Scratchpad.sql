@@ -178,7 +178,7 @@ order by 1,2;
 
 --What is the average segment length requested, duration of service for web service range requests made from non-interactive
 --clients (WormBase, Parasite, wget etc.,)?
-select client_ip, trim(cast(extract(year from request_ts) as VARCHAR(10))) || lpad(trim(cast(extract(month from request_ts) as VARCHAR(10))),2,'0') as MTH,avg(a.seg_len) as seg_len_avg, avg(a.duration) as duration_avg
+select client_ip, trim(cast(extract(year from request_ts) as VARCHAR(10))) || lpad(trim(cast(extract(month from request_ts) as VARCHAR(10))),2,'0') as MTH,max(a.seg_len) as seg_len_max, avg(a.seg_len) as seg_len_avg, avg(a.duration) as duration_avg
 from public.ws_traffic_useful_cols a WHERE request_uri_path like '%/segments/%' and request_query not like '%exclude=sourceEntries%' and request_ts >= '2015-04-21 14:30:28.000000' and user_agent not like 'Mozilla%'
 group by 1,2 order by 1,2;
 
