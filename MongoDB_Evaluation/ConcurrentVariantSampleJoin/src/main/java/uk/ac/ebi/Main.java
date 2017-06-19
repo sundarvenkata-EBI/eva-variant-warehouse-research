@@ -14,6 +14,7 @@ import java.util.concurrent.*;
 import java.time.LocalDateTime;
 import java.net.URLEncoder;
 import java.util.stream.IntStream;
+import org.apache.hadoop.hbase.HBaseConfiguration;
 
 public class Main {
     private static final ConcurrentHashMap<Integer,Vector<Document>> conHashMap = new ConcurrentHashMap<Integer,Vector<Document>>();
