@@ -38,3 +38,13 @@ MongoDB_Evaluation/MongoDocSize\.c
 MongoDB_Evaluation/MongoDocSize
 
 MongoDB_Evaluation/MultiAllelicVariants/*
+
+history.txt
+
+CitusDB_Evaluation/JepsenTesting/jepsen.citustest
+CitusDB_Evaluation/JepsenTesting/jepsen_old
+
+*.png
+*.edn
+*.fressian
+latest
