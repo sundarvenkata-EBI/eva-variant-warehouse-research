@@ -1,7 +1,10 @@
 ﻿select * from public.a order by id;
 select * from public.b order by id;
-explain select * from public.set where val = 246;
+explain select * from public.set where val = 2596;
 
+select master_copy_shard_placement(105695, 'citusslave3', 5432, 'citusslave2', 5432);
+select * from pg_catalog.pg_dist_shard_placement where shardid = (select get_shard_id_for_distribution_column('set',32)); 
+select * from pg_catalog.pg_dist_shard_placement where shardid = 105695;
 select * from pg_catalog.pg_dist_shard  where logicalrelid = ; 
 
 select create_distributed_table('a', 'id');
@@ -24,9 +27,12 @@ create table if not exists b (
                               value int);
 
 
-create table if not exists test (id int primary key, val
-                           int)
+
 
 drop table set;
 create table if not exists set (val int);
 select create_distributed_table('set', 'val');
+
+drop table test;
+create table if not exists test (id int, val int);
+select create_distributed_table('test', 'id');

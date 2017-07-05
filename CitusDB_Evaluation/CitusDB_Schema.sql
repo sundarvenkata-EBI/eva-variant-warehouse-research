@@ -1,4 +1,7 @@
-﻿SELECT run_command_on_workers($cmd$ alter user postgres set citus.shard_replication_factor=3; $cmd$);
+﻿alter user postgres set citus.shard_replication_factor=3;
+show citus.shard_replication_factor;
+SELECT run_command_on_workers($cmd$ show citus.shard_count; $cmd$);
+SELECT run_command_on_workers($cmd$ alter user postgres set citus.shard_replication_factor=3; $cmd$);
 SELECT run_command_on_workers($cmd$ show citus.shard_replication_factor; $cmd$);
 SELECT run_command_on_workers($cmd$ alter user postgres set citus.shard_max_size='10GB'; $cmd$);
 SELECT run_command_on_workers($cmd$ show citus.shard_max_size; $cmd$);

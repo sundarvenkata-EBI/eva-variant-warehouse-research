@@ -29,11 +29,11 @@
       (locking tbl-created?
         (when (compare-and-set! tbl-created? false true)
           (c/with-conn [c conn]
-            (Thread/sleep 1000)
-            (j/execute! c ["drop table if exists test"])
-            (Thread/sleep 1000)
+            ;(Thread/sleep 1000)
+            ;(j/execute! c ["drop table if exists test"])
+            ;(Thread/sleep 1000)
             (info node "Creating table")
-            (j/execute! c ["create table test (id int primary key, val
+            (j/execute! c ["create table if not exists test (id int primary key, val
                            int)"]))))
 
       (assoc this :conn conn)))
