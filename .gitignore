@@ -48,3 +48,5 @@ CitusDB_Evaluation/JepsenTesting/jepsen_old
 *.edn
 *.fressian
 latest
+timeline.html
+linear.svg

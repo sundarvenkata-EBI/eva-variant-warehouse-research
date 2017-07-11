@@ -26,11 +26,11 @@
           (c/with-conn [c conn]
             (Thread/sleep 1000)
             (c/with-txn-retry
-              (j/execute! c ["drop table if exists accounts"]))
+              #_ (j/execute! c ["drop table if exists accounts"]))
             (Thread/sleep 1000)
             (info "Creating table")
             (c/with-txn-retry
-              (j/execute! c ["create table accounts
+              (j/execute! c ["create table if not exists accounts
                              (id      int not null primary key,
                              balance bigint not null)"]))
             (dotimes [i n]
@@ -84,7 +84,7 @@
     (try
       (c/with-timeout
         (c/with-conn [c conn]
-          (j/execute! c ["drop table if exists accounts"])))
+          #_ (j/execute! c ["drop table if exists accounts"])))
       (finally
         (rc/close! conn)))))
 
@@ -236,7 +236,7 @@
       (c/with-conn [c conn]
         (c/with-timeout
           (dotimes [i n]
-            (j/execute! c [(str "drop table if exists accounts" i)]))))
+            #_ (j/execute! c [(str "drop table if exists accounts" i)]))))
       (finally
         (rc/close! conn)))))
 
