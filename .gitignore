@@ -50,3 +50,5 @@ CitusDB_Evaluation/JepsenTesting/jepsen_old
 latest
 timeline.html
 linear.svg
+*.gz.tbi
+*.gz
