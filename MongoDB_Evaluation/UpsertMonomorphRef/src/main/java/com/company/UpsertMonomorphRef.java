@@ -13,8 +13,8 @@ import java.util.Vector;
 
 import static java.lang.Math.toIntExact;
 
+public class UpsertMonomorphRef {
 
-public class Main {
     private static StringBuilder headerLines = new StringBuilder();
     private static String sampleName = "";
 
@@ -25,47 +25,46 @@ public class Main {
 
     public static void main(String[] args) {
 
-                String[] sampleNameComps = null;
-                int lineBatchSize = 50;
-                String line = "";
+        String[] sampleNameComps = null;
+        int lineBatchSize = 50;
+        String line = "";
 
-                System.out.println(LocalDateTime.now());
-                Scanner in = new Scanner(System.in);
-                Cluster cluster = Cluster.builder().addContactPoint("172.22.70.150").addContactPoint("172.22.70.139").addContactPoint("172.22.70.148").addContactPoint("172.22.68.19").build();
-                session = cluster.connect("variant_ksp");
-                stmt = session.prepare("INSERT INTO variants (chrom,chunk,start_pos,ref,alt,qual,filter,info,sampleinfoformat,sampleinfo,var_id,var_uniq_id,sampleName) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)");
-                while (in.hasNextLine()) {
-                    line = in.nextLine().trim();
-                    if (line.startsWith("#")) {
-                        headerLines.append(line);
-                        headerLines.append(System.getProperty("line.separator"));
-                        if (line.startsWith("#CHROM")) {
-                            sampleNameComps = line.split("\t");
-                            sampleName = sampleNameComps[sampleNameComps.length - 1];
-                            writeHeaderToCassandra(headerLines.toString().trim(), sampleName);
-                            break;
-                        }
-                    }
+        System.out.println(LocalDateTime.now());
+        Scanner in = new Scanner(System.in);
+        Cluster cluster = Cluster.builder().addContactPoint("172.22.70.150").addContactPoint("172.22.70.139").addContactPoint("172.22.70.148").addContactPoint("172.22.68.19").build();
+        session = cluster.connect("variant_ksp");
+        stmt = session.prepare("INSERT INTO variants (chrom,chunk,start_pos,ref,alt,qual,filter,info,sampleinfoformat,sampleinfo,var_id,var_uniq_id,sampleName) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)");
+        while (in.hasNextLine()) {
+            line = in.nextLine().trim();
+            if (line.startsWith("#")) {
+                headerLines.append(line);
+                headerLines.append(System.getProperty("line.separator"));
+                if (line.startsWith("#CHROM")) {
+                    sampleNameComps = line.split("\t");
+                    sampleName = sampleNameComps[sampleNameComps.length - 1];
+                    writeHeaderToCassandra(headerLines.toString().trim(), sampleName);
+                    break;
                 }
-                while (in.hasNextLine()) {
-                    line = in.nextLine().trim();
-                    linesToWrite.add(line);
-                    lineBatchIndex += 1;
-                    if (lineBatchIndex == lineBatchSize) {
-                        writeVariantToCassandra(linesToWrite, sampleName);
-                        lineBatchIndex = 0;
-                        linesToWrite.removeAllElements();
-                    }
-                }
+            }
+        }
+        while (in.hasNextLine()) {
+            line = in.nextLine().trim();
+            linesToWrite.add(line);
+            lineBatchIndex += 1;
+            if (lineBatchIndex == lineBatchSize) {
+                writeVariantToCassandra(linesToWrite, sampleName);
+                lineBatchIndex = 0;
+                linesToWrite.removeAllElements();
+            }
+        }
 
-                if (!linesToWrite.isEmpty()) {
-                    writeVariantToCassandra(linesToWrite, sampleName);
-                }
+        if (!linesToWrite.isEmpty()) {
+            writeVariantToCassandra(linesToWrite, sampleName);
+        }
 
-                session.close();
-                cluster.close();
-                System.out.println(LocalDateTime.now());
-
+        session.close();
+        cluster.close();
+        System.out.println(LocalDateTime.now());
     }
 
     private static void writeVariantToCassandra(Vector<String> linesToWrite, String sampleName) {
@@ -86,6 +85,16 @@ public class Main {
             String info = lineComps[7].trim();
             String sampleInfoFormat = lineComps[8].trim();
             String sampleInfo = lineComps[9].trim();
+            if (alt.equals("."))
+            {
+                String[] sampleInfoComps = sampleInfoFormat.split(":");
+                int genotypeIndex = 0;
+                for (String sampleInfoComp:
+                        sampleInfoComps) {
+                    if (sampleInfoComp.equals("GT")) break;
+                    genotypeIndex += 1;
+                }
+            }
             String variantID = "";
             int chunk = toIntExact(position/chunkSize);
             try {
