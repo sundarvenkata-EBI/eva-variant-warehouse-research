@@ -1,0 +1,154 @@
+# Playbook to install and configure Cassandra according to recommended settings - http://docs.datastax.com/en/landing_page/doc/landing_page/recommendedSettings.html
+# Search for the text changeme to look for lines that could be changed based on device name, OS etc.,
+---
+- hosts: local
+  vars:
+   host_ip: '{{ ansible_default_ipv4["address"] }}'
+   cluster_nodes: '192.168.0.18,192.168.0.22,192.168.0.20,192.168.0.21,192.168.0.23,192.168.0.17,192.168.0.19,192.168.0.24,192.168.0.16,192.168.0.9,192.168.0.15,192.168.0.8,192.168.0.13,192.168.0.14,192.168.0.6,192.168.0.11,192.168.0.5,192.168.0.12,192.168.0.7,192.168.0.27'
+   cluster_list: "{{ cluster_nodes.split(',') }}"   
+  tasks:
+   - set_fact:
+      ip_allow_list: "{{ cluster_list | difference(host_ip) }}"
+   - name: Install persistent iptables     
+     apt:      
+      pkg: iptables-persistent
+      state: installed      
+     register: iptablesinstall
+   - name: Add Cassandra repository key
+     apt_key:
+       url: https://www.apache.org/dist/cassandra/KEYS
+       state: present
+     register: cassrepokey  
+   - name: Add Cassandra repository
+     when: cassrepokey|success
+     apt_repository:       
+       repo: deb http://www.apache.org/dist/cassandra/debian 311x main
+       state: present
+     register: cassrepoadd
+   - name: Install Cassandra
+     when: cassrepoadd|success
+     apt:      
+      pkg: cassandra
+      state: installed
+      update_cache: true
+     register: cassinstall
+   - name: Stop Cassandra
+     when: cassinstall|success
+     systemd:
+      name: cassandra
+      state: stopped
+     register: cassstop
+   - name: Disable CPU Frequency scaling
+     when: cassstop|success
+     script: ~/disable-cpufreq.sh
+   - name: Disable zone reclaim on NUMA systems
+     when: cassstop|success
+     become: true     
+     lineinfile:
+      dest=/proc/sys/vm/zone_reclaim_mode
+      regexp=''
+      insertafter=EOF
+      line='0'
+   - name: Set user resource limits
+     when: cassstop|success
+     become: true
+     lineinfile:
+      dest: /etc/security/limits.d/cassandra.conf
+      regexp: "{{ item.regexp }}"
+      line: "{{ item.line }}"
+     with_items:
+      - { regexp: '^cassandra.+memlock', line: 'cassandra  -  memlock  unlimited' }
+      - { regexp: '^cassandra.+nofile', line: 'cassandra  -  nofile   100000' }
+      - { regexp: '^cassandra.+as ', line: 'cassandra  -  as       unlimited' }
+      - { regexp: '^cassandra.+nproc ', line: 'cassandra  -  nproc    32768' }
+   - name: Enable pam_limits module
+     when: cassstop|success
+     become: true
+     lineinfile:
+      dest: /etc/pam.d/su
+      regexp: "{{ item.regexp }}"
+      line: "{{ item.line }}"
+      backrefs: yes
+     with_items:
+      - { regexp: '^#\s*session\s+required\s+pam_limits.so', line: 'session    required   pam_limits.so' }
+   - name: Optimize sysctl
+     when: cassstop|success
+     become: true
+     blockinfile: |
+      dest=/etc/sysctl.conf
+      content="net.core.rmem_max = 16777216
+        net.core.wmem_max = 16777216
+        net.core.rmem_default = 16777216
+        net.core.wmem_default = 16777216
+        net.core.optmem_max = 40960
+        net.ipv4.tcp_rmem = 4096 87380 16777216
+        net.ipv4.tcp_wmem = 4096 65536 16777216
+        vm.max_map_count = 1048575"
+   - name: Disable Swap
+     when: cassstop|success
+     become: true
+     command: swapoff --all
+   - name: Disable transparent huge pages
+     when: cassstop|success
+     become: true
+     shell: echo never | tee /sys/kernel/mm/transparent_hugepage/defrag
+     register: transphugepages
+   - name: Optimize SSD settings #changeme
+     when: cassstop|success
+     become: true
+     blockinfile:
+      path: /etc/rc.local
+      insertbefore: '\s*exit\s+0\s*'
+      content: |
+        echo deadline > /sys/block/vda/queue/scheduler
+        touch /var/lock/subsys/local
+        echo 0 > /sys/class/block/vda/queue/rotational
+        echo 8 > /sys/class/block/vda/queue/read_ahead_kb
+   - name: Update readahead #changeme
+     when: cassstop|success
+     become: true
+     command: blockdev --setra 128 /dev/vda
+   - name: Delete default dataset
+     when: cassstop|success
+     become: true
+     command: rm -rf /var/lib/cassandra/data/system/*
+   - name: Configure Cassandra Cluster settings in Cassandra YAML file
+     when: cassstop|success
+     become: true
+     lineinfile:
+      dest: /etc/cassandra/cassandra.yaml
+      regexp: "{{ item.regexp }}"
+      line: "{{ item.line }}"
+      backrefs: true
+     with_items:
+      - { regexp: '^(\s*cluster_name:\s+).*', line: '\g<1>''cassclust''' }
+      - { regexp: '^(\s*-\s*seeds:\s+).*', line: '\g<1>"{{ cluster_nodes }}"' }
+      - { regexp: '^(\s*listen_address:\s+).*', line: '\g<1>{{ host_ip }}' }
+      - { regexp: '^(\s*rpc_address:\s+).*', line: '\g<1>{{ host_ip }}' }
+   - name: Disable Auto-Bootstrap in Cassandra YAML file
+     when: cassstop|success
+     become: true
+     lineinfile:
+      dest=/etc/cassandra/cassandra.yaml
+      regexp=''
+      insertafter=EOF
+      line='auto_bootstrap{{ ":" }} false'
+   - name: Restart Cassandra
+     when: cassstop|success
+     become: true
+     systemd:
+      name: cassandra
+      state: started
+   - name: Allow traffic to current node from other nodes
+     become: true
+     lineinfile:
+      dest: /etc/iptables/rules.v4
+      line: '-A INPUT -p tcp -s {{ item }} -m multiport --dports 7000,9042 -m state --state NEW,ESTABLISHED -j ACCEPT'
+      insertbefore: '^\s*COMMIT\s*'
+     with_items: "{{ ip_allow_list }}"
+   - name: Restart iptables
+     when: iptablesinstall|success
+     become: true
+     systemd:
+      name: netfilter-persistent
+      state: restarted
