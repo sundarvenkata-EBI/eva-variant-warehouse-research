@@ -1,7 +1,7 @@
 # Playbook to install and configure Cassandra according to recommended settings - http://docs.datastax.com/en/landing_page/doc/landing_page/recommendedSettings.html
 # Search for the text changeme to look for lines that could be changed based on device name, OS etc.,
 ---
-- hosts: local
+- hosts: cassnodes
   vars:
    host_ip: '{{ ansible_default_ipv4["address"] }}'
    cluster_nodes: '192.168.0.18,192.168.0.22,192.168.0.20,192.168.0.21,192.168.0.23,192.168.0.17,192.168.0.19,192.168.0.24,192.168.0.16,192.168.0.9,192.168.0.15,192.168.0.8,192.168.0.13,192.168.0.14,192.168.0.6,192.168.0.11,192.168.0.5,192.168.0.12,192.168.0.7,192.168.0.27'
@@ -9,7 +9,17 @@
   tasks:
    - set_fact:
       ip_allow_list: "{{ cluster_list | difference(host_ip) }}"
-   - name: Install persistent iptables     
+   - name: Add hostname to /etc/hosts file
+     become: true
+     lineinfile:
+      dest: /etc/hosts
+      regexp: "{{ item.regexp }}"
+      line: "{{ item.line }}"      
+     with_items:
+      - { regexp: '^\s*127.0.0.1\s*localhost\s*$', line: '127.0.0.1 localhost localhost.localdomain {{ ansible_hostname }}' }
+     register: hostsfilechanged
+   - name: Install persistent iptables
+     when: hostsfilechanged|success
      apt:      
       pkg: iptables-persistent
       state: installed      
@@ -125,6 +135,15 @@
       - { regexp: '^(\s*-\s*seeds:\s+).*', line: '\g<1>"{{ cluster_nodes }}"' }
       - { regexp: '^(\s*listen_address:\s+).*', line: '\g<1>{{ host_ip }}' }
       - { regexp: '^(\s*rpc_address:\s+).*', line: '\g<1>{{ host_ip }}' }
+   - name: Configure Cassandra Environment settings in cassandra-env.sh
+     when: cassstop|success
+     become: true
+     lineinfile:
+      dest: /etc/cassandra/cassandra-env.sh
+      regexp: "{{ item.regexp }}"
+      line: "{{ item.line }}"      
+     with_items:
+      - { regexp: '^(\s*#\s*JVM_OPTS.+Djava.rmi.server.hostname\s*).*', line: 'JVM_OPTS="$JVM_OPTS -Djava.rmi.server.hostname=192.168.0.26"' }      
    - name: Disable Auto-Bootstrap in Cassandra YAML file
      when: cassstop|success
      become: true
