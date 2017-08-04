@@ -1,9 +1,10 @@
+#!/usr/bin/python
 # This script retrieves data from Kibana (tracker for Web Service requests) and dumps into a local postgres instance for analysis
 import requests, json, os
 import psycopg2, traceback, urllib2
 
 # Citus credentials
-postgresConnHandle = psycopg2.connect("dbname='postgres' user='postgres' host='localhost' password=''")
+postgresConnHandle = psycopg2.connect("dbname='eva_websrvc_logs' user='postgres' host='localhost' password=''")
 resultCursor = postgresConnHandle.cursor()
 
 try:

@@ -1,7 +1,7 @@
 import ftplib
-import os, glob, hashlib
+import os, hashlib
 from cassandra.cluster import Cluster
-from cassandra.query import PreparedStatement, BatchStatement, BatchType
+from cassandra.query import BatchStatement, BatchType
 from pyspark import SparkConf, SparkContext
 conf = SparkConf().setMaster("spark://192.168.0.26:7077").setAppName("SingleSampleVCFMerge")
 sc = SparkContext(conf=conf)
@@ -35,6 +35,7 @@ def writeHeaderToCassandra(headerLines, sampleName):
 
 
 def cassandraInsert(vcfFileName):
+    totNumVariants = 0
     vcfFileHandle = open(vcfFileName, 'r')
     headerLines = ""
     sampleName = ""
@@ -50,6 +51,7 @@ def cassandraInsert(vcfFileName):
                 break
     lineBatchIndex = 0
     for line in vcfFileHandle:
+        totNumVariants += 1
         line = line.strip()
         linesToWrite.append(line)
         lineBatchIndex += 1
@@ -60,12 +62,13 @@ def cassandraInsert(vcfFileName):
     if linesToWrite:
         writeVariantToCassandra(linesToWrite, sampleName)
     vcfFileHandle.close()
-
+    return totNumVariants
 
 
 
 def processStudyFiles(ftpSite, studyFilesDir, ftpUserName, studyIndivFilePrefix):
     global cluster, session, stmt
+    totNumVariants = 0
     cluster = Cluster(["192.168.0.18", "192.168.0.22", "192.168.0.20"])
     session = cluster.connect("variant_ksp")
     stmt = session.prepare("INSERT INTO variants (chrom,chunk,start_pos,ref,alt,qual,filter,info,sampleinfoformat,sampleinfo,var_id,var_uniq_id,sampleName) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
@@ -100,10 +103,12 @@ def processStudyFiles(ftpSite, studyFilesDir, ftpUserName, studyIndivFilePrefix)
     if filterCommandResult != 0:
         print("Failed to process {}".format(studyIndivFilePrefix))
     else:
-        cassandraInsert(baseDir + os.path.sep + "{0}_filtered.snp.vcf".format(studyIndivFilePrefix))
+        totNumVariants = cassandraInsert(baseDir + os.path.sep + "{0}_filtered.snp.vcf".format(studyIndivFilePrefix))
+        os.system("echo {0} > {1}_filtered_variant_count.txt".format(str(totNumVariants), studyIndivFilePrefix))
 
     session.shutdown()
     cluster.shutdown()
+    return "Number of variants from {0}:{1}".format(studyIndivFilePrefix + ".snp.vcf.gz", totNumVariants)
 
 
 
