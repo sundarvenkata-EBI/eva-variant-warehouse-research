@@ -1,9 +1,12 @@
-# Playbook to install and configure Cassandra according to recommended settings - http://docs.datastax.com/en/landing_page/doc/landing_page/recommendedSettings.html
+# Playbook to install and configure Cassandra according to recommended settings
+# For installation instructions, see http://digitalocean.com/community/tutorials/how-to-run-a-multi-node-cluster-database-with-cassandra-on-ubuntu-14-04 and http://cassandra.apache.org/download/
+# For recommended settings - see http://docs.datastax.com/en/landing_page/doc/landing_page/recommendedSettings.html
 # Search for the text changeme to look for lines that could be changed based on device name, OS etc.,
 ---
 - hosts: cassnodes
   vars:
    host_ip: '{{ ansible_default_ipv4["address"] }}'
+   # Comma-separated IP addresses of all the nodes in the cluster
    cluster_nodes: '192.168.0.18,192.168.0.22,192.168.0.20,192.168.0.21,192.168.0.23,192.168.0.17,192.168.0.19,192.168.0.24,192.168.0.16,192.168.0.9,192.168.0.15,192.168.0.8,192.168.0.13,192.168.0.14,192.168.0.6,192.168.0.11,192.168.0.5,192.168.0.12,192.168.0.7,192.168.0.27'
    cluster_list: "{{ cluster_nodes.split(',') }}"   
   tasks:
@@ -135,6 +138,10 @@
       - { regexp: '^(\s*-\s*seeds:\s+).*', line: '\g<1>"{{ cluster_nodes }}"' }
       - { regexp: '^(\s*listen_address:\s+).*', line: '\g<1>{{ host_ip }}' }
       - { regexp: '^(\s*rpc_address:\s+).*', line: '\g<1>{{ host_ip }}' }
+      - { regexp: '^(\s*read_request_timeout_in_ms:\s+).*', line: '\g<1>1200000' }
+      - { regexp: '^(\s*range_request_timeout_in_ms:\s+).*', line: '\g<1>1200000' }
+      - { regexp: '^(\s*write_request_timeout_in_ms:\s+).*', line: '\g<1>1200000' }
+      - { regexp: '^(\s*request_timeout_in_ms:\s+).*', line: '\g<1>1200000' }
    - name: Configure Cassandra Environment settings in cassandra-env.sh
      when: cassstop|success
      become: true
@@ -143,7 +150,7 @@
       regexp: "{{ item.regexp }}"
       line: "{{ item.line }}"      
      with_items:
-      - { regexp: '^(\s*#\s*JVM_OPTS.+Djava.rmi.server.hostname\s*).*', line: 'JVM_OPTS="$JVM_OPTS -Djava.rmi.server.hostname=192.168.0.26"' }      
+      - { regexp: '^(\s*#\s*JVM_OPTS.+Djava.rmi.server.hostname\s*).*', line: 'JVM_OPTS="$JVM_OPTS -Djava.rmi.server.hostname={{ host_ip }}"' }      
    - name: Disable Auto-Bootstrap in Cassandra YAML file
      when: cassstop|success
      become: true
