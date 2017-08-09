@@ -1,0 +1,13 @@
+---
+- hosts: citusmasternodes  
+  vars:
+   host_ip: '{{ ansible_default_ipv4["address"] }}'   
+  tasks:   
+   - name: Add hostname to /etc/hosts file
+     become: true
+     lineinfile:
+      dest: /etc/hosts
+      regexp: "{{ item.regexp }}"
+      line: "{{ item.line }}"      
+     with_items:
+      - { regexp: '^\s*127.0.0.1\s*localhost\s*.*$', line: '127.0.0.1 localhost localhost.localdomain localhost4 localhost4.localdomain4 {{ ansible_hostname }}' }

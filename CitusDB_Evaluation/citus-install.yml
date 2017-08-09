@@ -1,0 +1,104 @@
+# Playbook to install and configure Citus according to recommended settings
+# For installation instructions, see https://docs.citusdata.com/en/v6.2/installation/production_rhel.html
+# Search for the text changeme to look for lines that could be changed based on device name, OS etc.,
+---
+- hosts: citusmasterwritenode:citusworkernodes
+  vars:
+   host_ip: '{{ ansible_default_ipv4["address"] }}'   
+  tasks:   
+   - name: Add hostname to /etc/hosts file
+     become: true
+     lineinfile:
+      dest: /etc/hosts
+      regexp: "{{ item.regexp }}"
+      line: "{{ item.line }}"      
+     with_items:
+      - { regexp: '^\s*127.0.0.1\s*localhost\s*.*$', line: '127.0.0.1 localhost localhost.localdomain localhost4 localhost4.localdomain4 {{ ansible_hostname }}' }
+     register: hostsfilechanged
+   - name: Add repository
+     when: hostsfilechanged|success
+     become: true
+     shell: ls /etc/yum.repos.d/citusdata_community.repo || (curl https://install.citusdata.com/community/rpm.sh | bash)
+     register: citusrepoadded
+   - name: Install PostgreSQL and Citus
+     when: citusrepoadded|success
+     become: true
+     yum:      
+      pkg: citus62_96
+      state: installed
+      update_cache: true
+     register: citusinstall
+   - name: Initialize system database
+     when: citusinstall|success
+     become: true
+     shell: ls /var/lib/pgsql/9.6/data/pg_log || /usr/pgsql-9.6/bin/postgresql96-setup initdb
+     register: citusinit
+   - name: Preload Citus extension
+     when: citusinit|success
+     become: true
+     lineinfile:
+      dest=/var/lib/pgsql/9.6/data/postgresql.conf
+      regexp=''
+      insertafter=EOF
+      line="shared_preload_libraries = 'citus'"
+     register: citusextinstalled
+   - name: Configure connection
+     when: citusextinstalled|success
+     become: true
+     lineinfile:
+      dest: /var/lib/pgsql/9.6/data/postgresql.conf
+      regexp: "{{ item.regexp }}"
+      line: "{{ item.line }}"
+      backrefs: true
+     with_items:
+      - { regexp: '^\s*#\s*listen_addresses\s*=.+', line: "listen_addresses = '*'" }
+     register: citusconnconfig
+   - name: Configure authentication #Changeme
+     when: citusconnconfig|success
+     become: true
+     blockinfile:
+      path: /var/lib/pgsql/9.6/data/pg_hba.conf
+      block: |
+        # Allow unrestricted access to nodes in the local network. The following ranges
+        # correspond to 24, 20, and 16-bit blocks in Private IPv4 address spaces.
+        host    all             all             192.0.0.0/8             trust
+        # Also allow the host unrestricted access to connect to itself
+        host    all             all             127.0.0.1/32            trust
+        host    all             all             ::1/128                 trust
+     register: citusauthconfig
+   - name: Restart Postgres
+     when: citusauthconfig|success
+     become: true
+     systemd:
+      name: postgresql-9.6
+      state: restarted
+     register: postgresrestart
+   - name: Enable Postgres service auto-start
+     when: postgresrestart|success
+     become: true
+     service:
+      name: postgresql-9.6
+      enabled: yes
+     register: postgresautostartenabled
+   - name: Enable Citus extension
+     when: postgresrestart|success
+     become: true
+     become_user: postgres
+     shell: psql -c "CREATE EXTENSION IF NOT EXISTS citus;"
+     register: citusextenabled
+- hosts: citusmasterwritenode
+  tasks:   
+   - name: Add worker nodes list to the master node
+     become: true
+     become_user: postgres
+     shell: psql -c "SELECT * from master_add_node('{{ item }}', 5432);"
+     with_items: "{{ groups['citusworkernodes'] }}"
+     register: addworkernodes
+   - name: List worker nodes that were added
+     when: addworkernodes|success
+     become: true
+     become_user: postgres
+     shell: psql -c "SELECT * FROM master_get_active_worker_nodes();"
+     register: listworkernodes
+   - debug:
+      var: listworkernodes.stdout_lines

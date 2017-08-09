@@ -1,0 +1,69 @@
+---
+- hosts: citusstandbyreadnodes  
+  tasks:      
+   - name: Install Citus build dependencies     
+     become: true
+     yum:      
+      pkg: "{{ item }}"
+      state: installed
+      update_cache: true
+     with_items:
+      - postgresql96-devel
+      - postgresql96-server
+      - libxml2-devel
+      - libxslt-devel
+      - openssl-devel
+      - pam-devel
+      - readline-devel
+      - git
+      - flex
+      - gcc
+      - autoconf
+      - automake
+     register: builddeps
+   - name: Retrieve Citus modified source from Git repo
+     become: true
+     git:
+      repo: 'https://github.com/sundarvenkata-EBI/citus'      
+      dest: /opt/citusmod
+     register: citusmodfetched
+   - name: Compile the modified Citus source
+     when: citusmodfetched|success
+     become: true     
+     shell: "{{ item }}"
+     args:
+      chdir: /opt/citusmod
+     with_items:
+      - chmod +x configure && PG_CONFIG=/usr/pgsql-9.6/bin/pg_config ./configure
+      - make
+      - make install
+     register: compiletask
+   - debug:
+      var: compiletask.stdout
+   - name: Initialize system database
+     when: compiletask|success
+     become: true
+     shell: ls /var/lib/pgsql/9.6/data/pg_log || /usr/pgsql-9.6/bin/postgresql96-setup initdb
+     register: citusinitdb
+   - name: Preload Citus extension
+     when: citusinitdb|success
+     become: true
+     lineinfile:
+      dest=/var/lib/pgsql/9.6/data/postgresql.conf
+      regexp=''
+      insertafter=EOF
+      line="shared_preload_libraries = 'citus'"
+     register: citusextinstalled
+   - name: Start Postgres
+     when: citusextinstalled|success
+     become: true
+     systemd:
+      name: postgresql-9.6
+      state: restarted
+     register: postgresrestart
+   - name: Enable Citus extension
+     when: postgresrestart|success
+     become: true
+     become_user: postgres
+     shell: psql -c "CREATE EXTENSION IF NOT EXISTS citus;"
+     register: citusextenabled

@@ -151,9 +151,9 @@ for result in iterator:
     discardOutput = variantPositionFileHandle.write(result["chrom"] + "\t" + str(result["start_pos"]) + os.linesep)
 variantPositionFileHandle.close()
 
-numericRange = range(0,100)
+numericRange = range(0,10000)
 numProcessingNodes = 20
-numPartitions = 100
+numPartitions = 1000
 # partitionLength = len(studyIndivFilePrefixes)/numProcessingNodes
 studyIndivRDD = sc.parallelize(numericRange, numPartitions)
 sc.addFile(variantPositionFileName)

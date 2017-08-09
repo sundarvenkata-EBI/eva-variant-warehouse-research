@@ -201,3 +201,26 @@ group by 1,2 order by 1,2;
 select client_ip, trim(cast(extract(year from request_ts) as VARCHAR(10))) || lpad(trim(cast(extract(month from request_ts) as VARCHAR(10))),2,'0') as MTH,a.*
 from public.ws_traffic_useful_cols a WHERE client_ip = '131.111.56.122' and request_uri_path like '%/segments/%' and request_query not like '%exclude=sourceEntries%' and request_ts >= '2015-04-21 14:30:28.000000'
 order by 1,2;
+
+
+CREATE or REPLACE FUNCTION getSegmentLB(querystring text)
+  RETURNS int
+AS $$
+totSegmentLength = 0
+try:
+	segments = querystring.split("/segments/")[1].split("/variants")[0].split(",")
+	for segment in segments:
+			segment = segment.strip()
+			if segment:
+					segmentLBUB = segment.split(":")[1].split("-")
+					if len(segmentLBUB) < 2: return int(totSegmentLength)
+					segmentLength = float(segmentLBUB[1]) - float(segmentLBUB[0])
+					if (segmentLength > 0): totSegmentLength += segmentLength
+except Exception:
+	print(querystring)
+return int(totSegmentLength)
+$$ LANGUAGE plpythonu;
+
+select * from public.ws_traffic_useful_cols limit 10;
+select * from public.ws_traffic_useful_cols where request_uri_path like '%segments%' and request_uri_path like '%1:28350-28916%';
+select * from public.ws_traffic where request_uri_path like '%/variants%/info%' order by request_ts desc limit 10;

@@ -1,0 +1,24 @@
+# Playbook to install and configure Citus according to recommended settings
+# For installation instructions, see https://docs.citusdata.com/en/v6.2/installation/production_rhel.html
+# Search for the text changeme to look for lines that could be changed based on device name, OS etc.,
+---
+- hosts: citusmasternodes:citusworkernodes
+  vars:
+   host_ip: '{{ ansible_default_ipv4["address"] }}'   
+  tasks:   
+   - name: Create pgsql directory in Gluster Volume
+     become: true
+     file:
+      path: /mnt/glusterVol/{{ ansible_hostname }}/pgsql
+      mode: "u=rwx,g=rwx,o=rwx"
+      state: directory
+     register: pgsqldircreated
+   - name: Symlink /var/lib/pgsql to the directory in Gluster Volume
+     when: pgsqldircreated|success
+     become: true
+     file:
+      src: /mnt/glusterVol/{{ ansible_hostname }}/pgsql
+      dest: /var/lib/pgsql
+      mode: "u=rwx,g=rwx,o=rwx"
+      state: link
+     register: pgsymlinkcreated
