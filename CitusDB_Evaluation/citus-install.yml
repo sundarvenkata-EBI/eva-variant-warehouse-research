@@ -94,6 +94,12 @@
      shell: psql -c "SELECT * from master_add_node('{{ item }}', 5432);"
      with_items: "{{ groups['citusworkernodes'] }}"
      register: addworkernodes
+   - name: Create replication role in the write coordinator
+     when: addworkernodes|success
+     become: true
+     become_user: postgres
+     shell: psql -c "CREATE ROLE replication;"
+     register: createreplrole
    - name: List worker nodes that were added
      when: addworkernodes|success
      become: true
@@ -102,3 +108,16 @@
      register: listworkernodes
    - debug:
       var: listworkernodes.stdout_lines
+   - name: Configure streaming replication in write coordinator #Changeme
+     when: addworkernodes|success
+     become: true
+     lineinfile:
+      dest: /var/lib/pgsql/9.6/data/postgresql.conf
+      regexp: "{{ item.regexp }}"
+      line: "{{ item.line }}"
+      backrefs: true
+     with_items:
+      - { regexp: '^\s*#*\s*wal_level\s*=.+', line: "wal_level = hot_standby" }
+      - { regexp: '^\s*#*\s*max_wal_senders\s*=.+', line: "max_wal_senders = 5" }
+      - { regexp: '^\s*#*\s*wal_keep_segments\s*=.+', line: "wal_keep_segments = 32" }
+   

@@ -20,12 +20,9 @@ def processVariantMatchFile(uniqueVariantListFileName, numMatchedVariants, match
     insertDefaultGenotypeToCassandra(sampleName, defaultGenotype, numMatchedVariants)
     with gzip.open(uniqueVariantListFileName, "rb") as varListFile:
         with gzip.open(matchOutputFileName, "rb") as varMatchFile:
-            for line in varMatchFile:
-                line = line.strip()
-                if line.startswith('#'): break
             if defaultGenotype == "0/0":
                 for matchLine in varMatchFile:
-                    chromMatch, varPosMatch, ref, alt, genotype, formatMatch, sampleinfoMatch = matchLine.split("\t")
+                    chromMatch, varPosMatch, ref, alt, genotype, formatMatch, sampleinfoMatch = matchLine.strip().split("\t")
                     varPosMatch = long(varPosMatch)
                     chunk = int(varPosMatch/1000000)
                     for varPosLine in varListFile:
@@ -35,11 +32,11 @@ def processVariantMatchFile(uniqueVariantListFileName, numMatchedVariants, match
                         while varPosToFind > varPosMatch:
                             matchLine = varMatchFile.readline()
                             if not matchLine: return
-                            chromMatch, varPosMatch, ref, alt, genotype, formatMatch, sampleinfoMatch = matchLine.split("\t")
+                            chromMatch, varPosMatch, ref, alt, genotype, formatMatch, sampleinfoMatch = matchLine.strip().split("\t")
                             varPosMatch = long(varPosMatch)
                             chunk = int(varPosMatch / 1000000)
                         if (chromToFind, varPosToFind) == (chromMatch,varPosMatch):
-                            if genotype == defaultGenotype: break
+                            if genotype == defaultGenotype or alt != '.': break
                             session.execute(variantInsertPrepStmt.bind(
                                 [chromToFind, chunk, varPosToFind, ref, alt, sampleName, formatMatch, sampleinfoMatch]))
                             break
@@ -48,7 +45,7 @@ def processVariantMatchFile(uniqueVariantListFileName, numMatchedVariants, match
                                 [chromToFind, chunk, varPosToFind, ref, alt, sampleName, "GT", "./."]))
             else:
                 for matchLine in varMatchFile:
-                    chromMatch, varPosMatch, ref, alt, genotype, formatMatch, sampleinfoMatch = matchLine.split("\t")
+                    chromMatch, varPosMatch, ref, alt, genotype, formatMatch, sampleinfoMatch = matchLine.strip().split("\t")
                     varPosMatch = long(varPosMatch)
                     chunk = int(varPosMatch / 1000000)
                     for varPosLine in varListFile:
@@ -58,7 +55,7 @@ def processVariantMatchFile(uniqueVariantListFileName, numMatchedVariants, match
                         while varPosToFind > varPosMatch:
                             matchLine = varMatchFile.readline()
                             if not matchLine: return
-                            chromMatch, varPosMatch, ref, alt, genotype, formatMatch, sampleinfoMatch = matchLine.split("\t")
+                            chromMatch, varPosMatch, ref, alt, genotype, formatMatch, sampleinfoMatch = matchLine.strip().split("\t")
                             varPosMatch = long(varPosMatch)
                             chunk = int(varPosMatch / 1000000)
                         if (chromToFind, varPosToFind) == (chromMatch,varPosMatch):
