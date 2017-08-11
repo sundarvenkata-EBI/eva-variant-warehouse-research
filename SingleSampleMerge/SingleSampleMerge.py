@@ -1,9 +1,17 @@
-import ftplib
-import os, hashlib
+# import ftplib
+import os, hashlib, sys, glob, socket
+import traceback
+
 from cassandra.cluster import Cluster
 from cassandra.query import BatchStatement, BatchType
 from pyspark import SparkConf, SparkContext
-conf = SparkConf().setMaster("spark://192.168.0.26:7077").setAppName("SingleSampleVCFMerge")
+
+def get_ip_address():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.connect(("8.8.8.8", 80))
+    return s.getsockname()[0]
+
+conf = SparkConf().setMaster("spark://{0}:7077".format(get_ip_address())).setAppName("SingleSampleVCFMerge")
 sc = SparkContext(conf=conf)
 sc.setLogLevel("INFO")
 
@@ -26,12 +34,12 @@ def writeVariantToCassandra(linesToWrite, sampleName):
             variantID = chromosome + "_" + str(position).zfill(12) + "_" + hashlib.md5(ref + "_" + alt).hexdigest() + sampleName.zfill(12)
             boundStmt = stmt.bind([chromosome, chunk, position, ref, alt, qual, qualFilter, info, sampleInfoFormat, sampleInfo, rsID, variantID, sampleName])
             batch.add(boundStmt)
-        session.execute(batch)
+        session.execute(batch, timeout = 1200)
 
 
 def writeHeaderToCassandra(headerLines, sampleName):
-    headerPrepStmt = session.prepare("INSERT INTO headers (samplename, header) VALUES (?,?)")
-    session.execute(headerPrepStmt.bind([sampleName, headerLines]))
+    headerPrepStmt = session.prepare("INSERT INTO variant_ksp.headers (samplename, header) VALUES (?,?)")
+    session.execute(headerPrepStmt.bind([sampleName, headerLines]), timeout=1200)
 
 
 def cassandraInsert(vcfFileName):
@@ -65,65 +73,91 @@ def cassandraInsert(vcfFileName):
     return totNumVariants
 
 
+def getErrFileContents(errFileName):
+    errFileContents = None
+    with open(errFileName, "r") as errFileHandle:
+        errFileContents = errFileHandle.readlines()
+    return errFileContents
 
-def processStudyFiles(ftpSite, studyFilesDir, ftpUserName, studyIndivFilePrefix):
+
+def processStudyFiles(studyName, studyFileName, cassandraNodeIPs, bcfToolsDir):
     global cluster, session, stmt
     totNumVariants = 0
-    cluster = Cluster(["192.168.0.18", "192.168.0.22", "192.168.0.20"])
-    session = cluster.connect("variant_ksp")
-    stmt = session.prepare("INSERT INTO variants (chrom,chunk,start_pos,ref,alt,qual,filter,info,sampleinfoformat,sampleinfo,var_id,var_uniq_id,sampleName) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
-    baseDir = "/opt/data/mergevcf"
-    tbiFileName = studyIndivFilePrefix + ".snp.vcf.gz.tbi"
-    vcfFileName = studyIndivFilePrefix + ".snp.vcf.gz"
-    targettbiFileName = baseDir + os.path.sep + tbiFileName
-    targetvcfFileName = baseDir + os.path.sep + vcfFileName
-    filteredFileName = "{0}_filtered.snp.vcf".format(studyIndivFilePrefix)
-    os.chdir(baseDir)
-    if not os.path.isfile(targetvcfFileName):
-        ftp = ftplib.FTP(ftpSite, ftpUserName)
-        ftp.cwd(studyFilesDir)
+    filterCommandResult = -1
+    errFileContents,returnErrMsg, cluster, session = None, None, None, None
+    try:
+        cluster = Cluster(cassandraNodeIPs)
+        session = cluster.connect("variant_ksp")
+        stmt = session.prepare(
+            "insert into variant_ksp.variants (chrom,chunk,start_pos,ref,alt,qual,filter,info,sampleinfoformat,sampleinfo,var_id,var_uniq_id,sampleName) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
 
-        if os.path.isfile(targettbiFileName): return
-        if os.path.isfile(targetvcfFileName): return
-        targettbiFileHandle = open(targettbiFileName, 'wb')
-        targetvcfFileHandle = open(targetvcfFileName, 'wb')
+        samplePrefix = os.path.basename(studyFileName).split(".")[0]
+        baseDir = os.path.dirname(studyFileName)
+        filteredFileName = "{0}_filtered.vcf".format(samplePrefix)
+        os.chdir(baseDir)
 
-        print("Retrieving file:{0}".format(tbiFileName))
-        ftp.retrbinary('RETR %s' % tbiFileName, targettbiFileHandle.write)
-        print("Retrieving file:{0}".format(vcfFileName))
-        ftp.retrbinary('RETR %s' % vcfFileName, targetvcfFileHandle.write)
-        targettbiFileHandle.close()
-        targetvcfFileHandle.close()
+        if not os.path.isfile(baseDir + os.path.sep + filteredFileName):
+            os.system("""{0}/bin/bcftools filter {1} -e ALT=\\'.\\' -o {2}_filtered.vcf -O v 2> {2}_filtering_err.txt""".format(bcfToolsDir,studyFileName, samplePrefix))
+            errFileContents = getErrFileContents("{0}_filtering_err.txt".format(samplePrefix))
+            if errFileContents: filterCommandResult = -1
+        else:
+            filterCommandResult = 0
 
-    #filePrefix = vcfFileName.split(".")[0]
-    if not os.path.isfile(baseDir + os.path.sep + filteredFileName):
-        filterCommandResult = os.system("""/opt/bcftools/bin/bcftools filter {0}.snp.vcf.gz -e ALT=\\'.\\' -o {0}_filtered.snp.vcf -O v 2> {0}_filtering_err.txt""".format(studyIndivFilePrefix))
-    else:
-        filterCommandResult = 0
-    if filterCommandResult != 0:
-        print("Failed to process {}".format(studyIndivFilePrefix))
-    else:
-        totNumVariants = cassandraInsert(baseDir + os.path.sep + "{0}_filtered.snp.vcf".format(studyIndivFilePrefix))
-        os.system("echo {0} > {1}_filtered_variant_count.txt".format(str(totNumVariants), studyIndivFilePrefix))
+        if filterCommandResult != 0:
+             returnErrMsg = "Failed to process {0} due to error: {1}".format(studyFileName, errFileContents)
+        else:
+            totNumVariants = cassandraInsert(baseDir + os.path.sep + "{0}_filtered.vcf".format(samplePrefix))
+            os.system("echo {0} > {1}_filtered_variant_count.txt".format(str(totNumVariants), samplePrefix))
 
-    session.shutdown()
-    cluster.shutdown()
-    return "Number of variants from {0}:{1}".format(studyIndivFilePrefix + ".snp.vcf.gz", totNumVariants)
-
+    except Exception, ex:
+        returnErrMsg = "Error in processing file:{0}".format(studyFileName) + os.linesep + traceback.format_exc()
+    finally:
+        if cluster != None and session != None:
+            try:
+                session.shutdown()
+                cluster.shutdown()
+            except Exception, e:
+                pass
+            if not returnErrMsg:
+                session.execute()
+        if returnErrMsg: return returnErrMsg
+        return "Number of variants from {0}:{1}".format(studyFileName, totNumVariants)
 
 
-studyFilesDir = "/pub/databases/eva/PRJEB13618/submitted_files"
-ftpSite = "ftp.ebi.ac.uk"
-ftpUserName = "anonymous"
-ftp = ftplib.FTP(ftpSite, ftpUserName)
-ftp.cwd(studyFilesDir)
-dirContents = ftp.nlst("*.vcf.gz.tbi")
+
+# studyFilesDir = "/pub/databases/eva/PRJEB13618/submitted_files"
+# ftpSite = "ftp.ebi.ac.uk"
+# ftpUserName = "anonymous"
+# ftp = ftplib.FTP(ftpSite, ftpUserName)
+# ftp.cwd(studyFilesDir)
+if len(sys.argv) != 6:
+    print("Usage: SingleSampleMerge.py <Study Name> <Full Path to study files> <Cassandra node IP1> <Cassandra node IP2> <BCF Tools Directory>")
+    sys.exit(1)
+studyName = sys.argv[1]
+studyFilesInputDir = sys.argv[2]
+cassandraNodeIPs = [sys.argv[3], sys.argv[4]]
+bcfToolsDir = sys.argv[5]
+os.chdir(studyFilesInputDir)
+dirContents = glob.glob("*.vcf.gz")
 dirContents.sort()
-studyIndivFilePrefixes = [x.split(".")[0] for x in dirContents[:100]]
+studyFileNames = dirContents
 
-numProcessingNodes = 10
-numPartitions = 100
-# partitionLength = len(studyIndivFilePrefixes)/numProcessingNodes
-studyIndivRDD = sc.parallelize(studyIndivFilePrefixes, numPartitions)
-studyIndivRDD.map(lambda entry: processStudyFiles(ftpSite, studyFilesDir, ftpUserName, entry)).collect()
+keyspaceName = "variant_ksp"
+variantTableName = keyspaceName + "." + "variants_{0}".format(studyName)
+headerTableName = keyspaceName + "." + "headers_{0}".format(studyName)
+cluster = Cluster(cassandraNodeIPs)
+session = cluster.connect()
+session.execute("create keyspace if not exists variant_ksp with replication = {'class': 'SimpleStrategy', 'replication_factor' : 1};")
+session.execute("create table if not exists {0} (samplename varchar, header varchar, primary key(samplename));".format(headerTableName))
+session.execute("create table if not exists {0} (chrom varchar, chunk int, start_pos bigint, ref varchar, alt varchar, qual varchar, filter varchar, info varchar, sampleinfoformat varchar, sampleinfo  varchar, var_id varchar, var_uniq_id varchar, sampleName varchar,  primary key((chrom, chunk), start_pos, ref, alt, samplename));".format(variantTableName))
+session.shutdown()
+cluster.shutdown()
+
+numPartitions = len(studyFileNames)
+# partitionLength = len(studyFileNames)/numProcessingNodes
+studyIndivRDD = sc.parallelize(studyFileNames, numPartitions)
+results = studyIndivRDD.map(lambda entry: processStudyFiles(studyName, studyFilesInputDir + os.path.sep + entry, cassandraNodeIPs, bcfToolsDir)).collect()
+for result in results:
+    if not result.startswith("Number of"):
+        print result
 sc.stop()

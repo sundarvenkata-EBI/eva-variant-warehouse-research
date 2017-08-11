@@ -73,13 +73,13 @@ def matchVariantPosInStudyFiles(tokenNumber, numDistinctVariants, sparkRootDir, 
     defaultGenotypeInsertPrepStmt = session.prepare("INSERT INTO sample_defaults (samplename, default_genotype, num_match_variants) VALUES (?,?,?)")
     variantInsertPrepStmt = session.prepare("INSERT INTO variants (chrom,chunk,start_pos,ref,alt,samplename, sampleinfoformat, sampleinfo) VALUES (?,?,?,?,?,?,?,?)")
 
-
+    returnErrMsg = None
     gzipFileHandle = None
     chosenFileToProcess = None
     try:
-        baseDir = "/opt/data/mergevcf"
+        baseDir = "/mnt/glusterVol/mergevcfinput"
         os.chdir(baseDir)
-        fileList = glob.glob("*.snp.vcf.gz")
+        fileList = glob.glob("*.vcf.gz")
         numFiles = len(fileList)
         initialFileListIndex = tokenNumber%numFiles
         fileListIndex = initialFileListIndex
@@ -100,11 +100,11 @@ def matchVariantPosInStudyFiles(tokenNumber, numDistinctVariants, sparkRootDir, 
         variantPositionFilePath = sparkRootDir + os.path.sep + os.listdir(sparkRootDir)[0] + os.path.sep + variantPositionFileName
         matchOutputFileName = chosenFileToProcess.split(".")[0] + "_variantmatch.gz"
         errFileName = chosenFileToProcess.split(".")[0] + "_variantmatch.err"
-        sampleNameCmd = subprocess.Popen("/opt/bcftools/bin/bcftools query -l {0}".format(chosenFileToProcess), shell = True, stdout = subprocess.PIPE)
+        sampleNameCmd = subprocess.Popen("/mnt/glusterVol/bcftools/bin/bcftools query -l {0}".format(chosenFileToProcess), shell = True, stdout = subprocess.PIPE)
         sampleName, err = sampleNameCmd.communicate()
         if err: return "Could not obtain sample name from the SNP file:{0}".format(chosenFileToProcess)
         sampleName = sampleName.strip()
-        bcfVariantMatchCmd = "(/opt/bcftools/bin/bcftools query -f'%CHROM\\t%POS\\t%REF\\t%ALT[\\t%GT]\\t%LINE' -T {0} {2} | cut -f1,2,3,4,5,14,15 | gzip) 1> {1} 2> {3}".format(variantPositionFilePath, matchOutputFileName, chosenFileToProcess, errFileName)
+        bcfVariantMatchCmd = "(/mnt/glusterVol/bcftools/bin/bcftools query -f'%CHROM\\t%POS\\t%REF\\t%ALT[\\t%GT]\\t%LINE' -T {0} {2} | cut -f1,2,3,4,5,14,15 | gzip) 1> {1} 2> {3}".format(variantPositionFilePath, matchOutputFileName, chosenFileToProcess, errFileName)
         # result =
         result = os.system(bcfVariantMatchCmd)
         errFileHandle = open(errFileName, "r")
@@ -117,14 +117,15 @@ def matchVariantPosInStudyFiles(tokenNumber, numDistinctVariants, sparkRootDir, 
             else:
                 processVariantMatchFile(variantPositionFilePath, numMatchedVariants, matchOutputFileName, sampleName, "0/0")
         else:
-            return "Error in processing file:{0}".format(chosenFileToProcess) + os.linesep + os.linesep.join(errlines)
+            returnErrMsg = "Error in processing file:{0}".format(chosenFileToProcess) + os.linesep + os.linesep.join(errlines)
     except Exception, e:
-        return "Error in processing file:{0}".format(chosenFileToProcess) + os.linesep + traceback.format_exc()
+        returnErrMsg = "Error in processing file:{0}".format(chosenFileToProcess) + os.linesep + traceback.format_exc()
     finally:
         if gzipFileHandle:
             fcntl.flock(gzipFileHandle, fcntl.LOCK_UN)
         cluster.shutdown()
         session.shutdown()
+        if returnErrMsg: return returnErrMsg
         return "SUCCESS"
 
 

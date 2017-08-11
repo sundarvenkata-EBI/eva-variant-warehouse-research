@@ -6,12 +6,11 @@
 - hosts: cassnodes
   vars:
    host_ip: '{{ ansible_default_ipv4["address"] }}'
-   # Comma-separated IP addresses of all the nodes in the cluster
-   cluster_nodes: '192.168.0.18,192.168.0.22,192.168.0.20,192.168.0.21,192.168.0.23,192.168.0.17,192.168.0.19,192.168.0.24,192.168.0.16,192.168.0.9,192.168.0.15,192.168.0.8,192.168.0.13,192.168.0.14,192.168.0.6,192.168.0.11,192.168.0.5,192.168.0.12,192.168.0.7,192.168.0.27'
-   cluster_list: "{{ cluster_nodes.split(',') }}"   
+   cluster_nodes: "{{ groups['cassnodes'] }}"
+   cluster_list: "{{ ','.join(cluster_nodes) }}"
   tasks:
    - set_fact:
-      ip_allow_list: "{{ cluster_list | difference(host_ip) }}"
+      ip_allow_list: "{{ cluster_nodes | difference(host_ip) }}"
    - name: Add hostname to /etc/hosts file
      become: true
      lineinfile:
@@ -23,25 +22,27 @@
      register: hostsfilechanged
    - name: Install persistent iptables
      when: hostsfilechanged|success
-     apt:      
-      pkg: iptables-persistent
-      state: installed      
+     yum:
+      pkg: iptables-services
+      state: installed
      register: iptablesinstall
    - name: Add Cassandra repository key
-     apt_key:
-       url: https://www.apache.org/dist/cassandra/KEYS
+     rpm_key:
+       key: https://www.apache.org/dist/cassandra/KEYS
        state: present
      register: cassrepokey  
    - name: Add Cassandra repository
      when: cassrepokey|success
-     apt_repository:       
-       repo: deb http://www.apache.org/dist/cassandra/debian 311x main
+     yum_repository:
+       name: cassandra
+       baseurl: http://www.apache.org/dist/cassandra/redhat/30x/
+       description: Cassandra repository details
        state: present
      register: cassrepoadd
    - name: Install Cassandra
      when: cassrepoadd|success
-     apt:      
-      pkg: cassandra
+     yum:
+      pkg: cassandra-0:3.0.14-1.noarch
       state: installed
       update_cache: true
      register: cassinstall
@@ -129,13 +130,13 @@
      when: cassstop|success
      become: true
      lineinfile:
-      dest: /etc/cassandra/cassandra.yaml
+      dest: /etc/cassandra/conf/cassandra.yaml
       regexp: "{{ item.regexp }}"
       line: "{{ item.line }}"
       backrefs: true
      with_items:
       - { regexp: '^(\s*cluster_name:\s+).*', line: '\g<1>''cassclust''' }
-      - { regexp: '^(\s*-\s*seeds:\s+).*', line: '\g<1>"{{ cluster_nodes }}"' }
+      - { regexp: '^(\s*-\s*seeds:\s+).*', line: '\g<1>"{{ cluster_list }}"' }
       - { regexp: '^(\s*listen_address:\s+).*', line: '\g<1>{{ host_ip }}' }
       - { regexp: '^(\s*rpc_address:\s+).*', line: '\g<1>{{ host_ip }}' }
       - { regexp: '^(\s*read_request_timeout_in_ms:\s+).*', line: '\g<1>1200000' }
@@ -146,16 +147,17 @@
      when: cassstop|success
      become: true
      lineinfile:
-      dest: /etc/cassandra/cassandra-env.sh
+      dest: /etc/cassandra/conf/cassandra-env.sh
       regexp: "{{ item.regexp }}"
-      line: "{{ item.line }}"      
+      line: "{{ item.line }}"
+      backrefs: yes
      with_items:
       - { regexp: '^(\s*#\s*JVM_OPTS.+Djava.rmi.server.hostname\s*).*', line: 'JVM_OPTS="$JVM_OPTS -Djava.rmi.server.hostname={{ host_ip }}"' }      
    - name: Disable Auto-Bootstrap in Cassandra YAML file
      when: cassstop|success
      become: true
      lineinfile:
-      dest=/etc/cassandra/cassandra.yaml
+      dest=/etc/cassandra/conf/cassandra.yaml
       regexp=''
       insertafter=EOF
       line='auto_bootstrap{{ ":" }} false'
@@ -164,11 +166,19 @@
      become: true
      systemd:
       name: cassandra
+      daemon_reload: yes
       state: started
+   - name: Remove traffic restrictions on current node
+     become: true
+     lineinfile:
+      dest: /etc/sysconfig/iptables
+      state: absent
+      regexp: '\s*-A.*'
+     with_items: "{{ ip_allow_list }}"
    - name: Allow traffic to current node from other nodes
      become: true
      lineinfile:
-      dest: /etc/iptables/rules.v4
+      dest: /etc/sysconfig/iptables
       line: '-A INPUT -p tcp -s {{ item }} -m multiport --dports 7000,9042 -m state --state NEW,ESTABLISHED -j ACCEPT'
       insertbefore: '^\s*COMMIT\s*'
      with_items: "{{ ip_allow_list }}"
@@ -176,5 +186,5 @@
      when: iptablesinstall|success
      become: true
      systemd:
-      name: netfilter-persistent
+      name: iptables
       state: restarted
