@@ -1,6 +1,10 @@
 # Playbook to install and configure Cassandra according to recommended settings
-# For installation instructions, see http://digitalocean.com/community/tutorials/how-to-run-a-multi-node-cluster-database-with-cassandra-on-ubuntu-14-04 and http://cassandra.apache.org/download/
+#
+# For installation instructions, see https://www.howtoforge.com/tutorial/how-to-install-apache-cassandra-on-centos-7/,
+#  http://digitalocean.com/community/tutorials/how-to-run-a-multi-node-cluster-database-with-cassandra-on-ubuntu-14-04 and http://cassandra.apache.org/download/
+#
 # For recommended settings - see http://docs.datastax.com/en/landing_page/doc/landing_page/recommendedSettings.html
+
 # Search for the text changeme to look for lines that could be changed based on device name, OS etc.,
 ---
 - hosts: cassnodes
@@ -97,11 +101,8 @@
         net.core.optmem_max = 40960
         net.ipv4.tcp_rmem = 4096 87380 16777216
         net.ipv4.tcp_wmem = 4096 65536 16777216
-        vm.max_map_count = 1048575"
-   - name: Disable Swap
-     when: cassstop|success
-     become: true
-     command: swapoff --all
+        vm.max_map_count = 1048575
+        vm.swappiness=0"
    - name: Disable transparent huge pages
      when: cassstop|success
      become: true
@@ -181,6 +182,11 @@
       line: '-A INPUT -p tcp -s {{ item }} -m multiport --dports 7000,9042 -m state --state NEW,ESTABLISHED -j ACCEPT'
       insertbefore: '^\s*COMMIT\s*'
      with_items: "{{ ip_allow_list }}"
+     register: firewallcfg
+   - name: Reload sysctl
+     when: firewallcfg|success
+     become: true
+     command: sysctl -p
    - name: Restart iptables
      when: iptablesinstall|success
      become: true
