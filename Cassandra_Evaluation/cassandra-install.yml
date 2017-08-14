@@ -10,13 +10,13 @@
    cluster_list: "{{ ','.join(cluster_nodes) }}"
   tasks:
    - set_fact:
-      ip_allow_list: "{{ cluster_nodes | difference(host_ip) }}"
+      ip_allow_list: "{{ cluster_nodes | difference(host_ip) }}" # Allow traffic from cassandra nodes other than the local node
    - name: Add hostname to /etc/hosts file
      become: true
      lineinfile:
       dest: /etc/hosts
       regexp: "{{ item.regexp }}"
-      line: "{{ item.line }}"      
+      line: "{{ item.line }}"
      with_items:
       - { regexp: '^\s*127.0.0.1\s*localhost\s*$', line: '127.0.0.1 localhost localhost.localdomain {{ ansible_hostname }}' }
      register: hostsfilechanged
@@ -54,7 +54,7 @@
      register: cassstop
    - name: Disable CPU Frequency scaling
      when: cassstop|success
-     script: ~/disable-cpufreq.sh
+     script: ./disable-cpufreq.sh
    - name: Disable zone reclaim on NUMA systems
      when: cassstop|success
      become: true     
@@ -82,7 +82,7 @@
       dest: /etc/pam.d/su
       regexp: "{{ item.regexp }}"
       line: "{{ item.line }}"
-      backrefs: yes
+      backrefs: true
      with_items:
       - { regexp: '^#\s*session\s+required\s+pam_limits.so', line: 'session    required   pam_limits.so' }
    - name: Optimize sysctl
@@ -133,7 +133,6 @@
       dest: /etc/cassandra/conf/cassandra.yaml
       regexp: "{{ item.regexp }}"
       line: "{{ item.line }}"
-      backrefs: true
      with_items:
       - { regexp: '^(\s*cluster_name:\s+).*', line: '\g<1>''cassclust''' }
       - { regexp: '^(\s*-\s*seeds:\s+).*', line: '\g<1>"{{ cluster_list }}"' }
@@ -150,7 +149,7 @@
       dest: /etc/cassandra/conf/cassandra-env.sh
       regexp: "{{ item.regexp }}"
       line: "{{ item.line }}"
-      backrefs: yes
+      backrefs: true
      with_items:
       - { regexp: '^(\s*#\s*JVM_OPTS.+Djava.rmi.server.hostname\s*).*', line: 'JVM_OPTS="$JVM_OPTS -Djava.rmi.server.hostname={{ host_ip }}"' }      
    - name: Disable Auto-Bootstrap in Cassandra YAML file
