@@ -134,6 +134,7 @@
       dest: /etc/cassandra/conf/cassandra.yaml
       regexp: "{{ item.regexp }}"
       line: "{{ item.line }}"
+      backrefs: true
      with_items:
       - { regexp: '^(\s*cluster_name:\s+).*', line: '\g<1>''cassclust''' }
       - { regexp: '^(\s*-\s*seeds:\s+).*', line: '\g<1>"{{ cluster_list }}"' }
