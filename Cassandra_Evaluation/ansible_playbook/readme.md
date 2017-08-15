@@ -4,7 +4,7 @@
 
 This folder contains Ansible scripts to automatically install and configure Cassandra on an arbitrary number of nodes.
  
-#Pre-requisites
+# Pre-requisites
 
 1. Ansible control node - a VM/machine running CentOS 7 - Embassy cloud images can be found [here](https://extcloud06.ebi.ac.uk/dashboard/project/images). 
 2. Cassandra nodes - A set of VMs/machines running CentOS 7.
