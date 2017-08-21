@@ -144,6 +144,8 @@
       - { regexp: '^(\s*range_request_timeout_in_ms:\s+).*', line: '\g<1>1200000' }
       - { regexp: '^(\s*write_request_timeout_in_ms:\s+).*', line: '\g<1>1200000' }
       - { regexp: '^(\s*request_timeout_in_ms:\s+).*', line: '\g<1>1200000' }
+      - { regexp: '^(\s*batch_size_fail_threshold_in_kb:\s+).*', line: '\g<1>100000' }
+      - { regexp: '^(\s*batch_size_warn_threshold_in_kb:\s+).*', line: '\g<1>100000' }
    - name: Configure Cassandra Environment settings in cassandra-env.sh
      when: cassstop|success
      become: true
