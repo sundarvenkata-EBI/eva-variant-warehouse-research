@@ -1,0 +1,160 @@
+# Playbook to install and configure MongoDB according to recommended settings - see https://linode.com/docs/databases/mongodb/build-database-clusters-with-mongodb/
+#
+# Search for the text changeme to look for lines that could be changed based on device name, OS etc.,
+# Assumptions:
+  # 1) Mongo data nodes are named as mongod-1, mongod-2 etc and appear in the order in the Ansible host file provided
+  # 2) Mongo config nodes are named as mongoconfig-1, mongoconfig-2 etc and appear in the order in the Ansible host file provided
+  # 3) Mongo query router nodes are named as mongos-1, mongos-2 etc and appear in the order in the Ansible host file provided
+---
+  - hosts: mongo_data_nodes, mongo_config_nodes, mongos_nodes
+    vars:
+     host_ip: '{{ ansible_default_ipv4["address"] }}' 
+    tasks:
+    - name: Install EPEL for CentOS on all MongoDB nodes
+      become: true
+      yum: 
+        pkg: epel-release
+        state: installed 
+        update_cache: yes
+      register: epel_installed
+    - name: Install Pip on all MongoDB nodes
+      when: epel_installed|success
+      become: true
+      yum: 
+        pkg: python-pip
+        state: installed 
+        update_cache: yes
+      register: pip_installed
+    - name: Install PyMongo and Ansible on all MongoDB nodes
+      when: pip_installed|success
+      become: true      
+      pip:
+        name: "{{ item }}"
+      with_items:
+        - pymongo
+        - ansible
+      register: pymongo_ansible_installed
+    - name: Add MongoDB repository
+      when: pymongo_ansible_installed|success
+      yum_repository:
+        name: MongoDB-Repository
+        description: MongoDB Repository
+        baseurl: https://repo.mongodb.org/yum/redhat/$releasever/mongodb-org/3.6/x86_64/
+        gpgcheck: yes
+        enabled: yes
+        gpgkey: https://www.mongodb.org/static/pgp/server-3.6.asc
+        state: present
+      register: mongorepoadd
+    - name: Install MongoDB
+      when: mongorepoadd|success
+      yum:
+        pkg: mongodb-org-3.6.2
+        state: installed
+        update_cache: yes
+      register: mongoinstall
+    - name: Add Mongo data nodes and their corresponding IP addresses to /etc/hosts
+      when: mongoinstall|success
+      become: true
+      lineinfile:
+        dest: /etc/hosts        
+        line: "{{ item.0 + ' mongod-' + (item.1|string) }}"
+      with_together:
+      - "{{ groups['mongo_data_nodes'] }}"
+      - "{{ range(1,groups['mongo_data_nodes'].__len__()+1)|list }}"
+      register: add_mongod_nodes_to_hosts_file
+    - name: Add Mongo config nodes and their corresponding IP addresses to /etc/hosts
+      when: add_mongod_nodes_to_hosts_file|success
+      become: true
+      lineinfile:
+        dest: /etc/hosts        
+        line: "{{ item.0 + ' mongoconfig-' + (item.1|string) }}"
+      with_together:
+      - "{{ groups['mongo_config_nodes'] }}"
+      - "{{ range(1,groups['mongo_config_nodes'].__len__()+1)|list }}"
+      register: add_mongo_config_nodes_to_hosts_file
+    - name: Add Mongo query router nodes and their corresponding IP addresses to /etc/hosts
+      when: add_mongo_config_nodes_to_hosts_file|success
+      become: true
+      lineinfile:
+        dest: /etc/hosts        
+        line: "{{ item.0 + ' mongos-' + (item.1|string) }}"
+      with_together:
+      - "{{ groups['mongos_nodes'] }}"
+      - "{{ range(1,groups['mongos_nodes'].__len__()+1)|list }}"
+      register: add_mongos_nodes_to_hosts_file
+  - hosts: mongo_config_nodes
+    vars:
+      newline: "\n"
+    tasks:
+    - name: Write Mongo Config server settings in /etc/mongod.conf
+      when: add_mongos_nodes_to_hosts_file|success       
+      become: true
+      lineinfile:
+        dest: /etc/mongod.conf
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+        backrefs: true
+      with_items:
+        - { regexp: '^(\s*port:\s+)', line: '\g<1>27019' }
+        - { regexp: '^(\s*bindIp:\s+)', line: '\g<1>{{ ansible_default_ipv4["address"] }}' }
+        - { regexp: '^(\s*#replication:\s+)', line: 'replication:{{ newline }} replSetName: configReplSet' }
+        - { regexp: '^(\s*#sharding:\s+)', line: 'sharding:{{ newline }} clusterRole: "configsvr"' }
+      register: config_written
+    - name: Disable Transparent huge pages setting
+      when: config_written|success
+      copy:
+        src: disable-transparent-hugepages
+        dest: "/etc/init.d/disable-transparent-hugepages"
+        mode: 0755
+      register: disable_thp_setting
+    - name: run service disable transparent hugepages
+      when: disable_thp_setting|success
+      become: true
+      service:
+        name: disable-transparent-hugepages
+        state: started
+        enabled: yes
+      register: disable_thp_service
+    - name: Create a new profile for tuned daemon
+      when: disable_thp_service|success
+      become: true
+      file: path=/etc/tuned/no-thp state=directory
+      register: new_tuned_profile_create
+    - name: Configure new profile for tuned daemon
+      when: new_tuned_profile_create|success
+      become: true
+      copy:        
+        content: "[main]
+
+        include=virtual-guest
+        
+        [vm]
+        
+        transparent_hugepages=never
+        "
+        dest: /etc/tuned/no-thp/tuned.conf
+        force: no
+      register: new_tuned_profile_config
+    - name: Start new tuned profile
+      when: new_tuned_profile_config|success
+      become: true
+      shell: tuned-adm profile no-thp
+      register: start_new_tuned_profile
+    - name: Restart mongod in Config Servers
+      when: start_new_tuned_profile|success
+      become: true
+      systemd:
+        name: mongod
+        daemon_reload: yes
+        state: restarted
+      register: mongod_restarted
+  - hosts: mongo_config_nodes[0]
+    tasks:
+    - name: Initiate MongoDB replica set
+      when: mongod_restarted|success
+      become: true
+      mongodb_repl_set:
+        state: initiated
+        replSetMembers: "{{ ','.join(groups['mongo_config_nodes']) }}"
+        port: 27019
+      register: mongodb_repl_set_initiated

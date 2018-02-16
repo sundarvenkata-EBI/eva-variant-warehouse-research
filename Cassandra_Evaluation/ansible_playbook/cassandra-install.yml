@@ -39,14 +39,14 @@
      when: cassrepokey|success
      yum_repository:
        name: cassandra
-       baseurl: http://www.apache.org/dist/cassandra/redhat/30x/
+       baseurl: http://www.apache.org/dist/cassandra/redhat/311x/
        description: Cassandra repository details
        state: present
      register: cassrepoadd
    - name: Install Cassandra
      when: cassrepoadd|success
      yum:
-      pkg: cassandra-0:3.0.14-1.noarch
+      pkg: cassandra-0:3.11.1-1.noarch
       state: installed
       update_cache: true
      register: cassinstall
@@ -123,6 +123,10 @@
      when: cassstop|success
      become: true
      command: blockdev --setra 128 /dev/vda
+   - name: Use local storage for Cassandra Commit Log     
+     when: cassstop|success
+     become: true
+     command: bash -c "rm -rf /var/lib/cassandra_commit_log && mkdir -p /var/lib/cassandra_commit_log && chown -R cassandra.cassandra /var/lib/cassandra_commit_log && rm -rf /var/lib/cassandra/commitlog && ln -s /var/lib/cassandra_commit_log  /var/lib/cassandra/commitlog"
    - name: Delete default dataset
      when: cassstop|success
      become: true
@@ -143,9 +147,7 @@
       - { regexp: '^(\s*read_request_timeout_in_ms:\s+).*', line: '\g<1>1200000' }
       - { regexp: '^(\s*range_request_timeout_in_ms:\s+).*', line: '\g<1>1200000' }
       - { regexp: '^(\s*write_request_timeout_in_ms:\s+).*', line: '\g<1>1200000' }
-      - { regexp: '^(\s*request_timeout_in_ms:\s+).*', line: '\g<1>1200000' }
-      - { regexp: '^(\s*batch_size_fail_threshold_in_kb:\s+).*', line: '\g<1>100000' }
-      - { regexp: '^(\s*batch_size_warn_threshold_in_kb:\s+).*', line: '\g<1>100000' }
+      - { regexp: '^(\s*request_timeout_in_ms:\s+).*', line: '\g<1>1200000' }      
    - name: Configure Cassandra Environment settings in cassandra-env.sh
      when: cassstop|success
      become: true
