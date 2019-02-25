@@ -7,6 +7,7 @@
   # 3) Mongo query router nodes are named as mongos-1, mongos-2 etc and appear in the order in the Ansible host file provided
 ---
   - hosts: mongo_data_nodes, mongo_config_nodes, mongos_nodes
+    gather_facts: False
     vars:
      host_ip: '{{ ansible_default_ipv4["address"] }}' 
     tasks:
@@ -98,7 +99,7 @@
         - { regexp: '^(\s*port:\s+)', line: '\g<1>27019' }
         - { regexp: '^(\s*bindIp:\s+)', line: '\g<1>{{ ansible_default_ipv4["address"] }}' }
         - { regexp: '^(\s*#replication:\s+)', line: 'replication:{{ newline }} replSetName: configReplSet' }
-        - { regexp: '^(\s*#sharding:\s+)', line: 'sharding:{{ newline }} clusterRole: "configsvr"' }
+        - { regexp: '^(\s*#sharding:\s+)', line: 'sharding:{{ newline }} clusterRole: configsvr' }
       register: config_written
     - name: Disable Transparent huge pages setting
       when: config_written|success
@@ -158,3 +159,144 @@
         replSetMembers: "{{ ','.join(groups['mongo_config_nodes']) }}"
         port: 27019
       register: mongodb_repl_set_initiated
+  - hosts: mongo_data_nodes
+    order: sorted
+    vars:
+      newline: "\n"
+      host_ip: '{{ ansible_default_ipv4["address"] }}'
+    tasks:
+    - name: Write Mongo data node settings in /etc/mongod.conf
+      when: add_mongos_nodes_to_hosts_file|success       
+      become: true
+      lineinfile:
+        dest: /etc/mongod.conf
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+        backrefs: true
+      with_items:
+        - { regexp: '^(\s*port:\s+)', line: '\g<1>27018' }
+        - { regexp: '^(\s*bindIp:\s+)', line: '\g<1>{{ host_ip }}' }
+        - { regexp: '^(\s*#replication:\s+)', line: 'replication:{{ newline }} replSetName: rs{{ (((ansible_nodename.split(".")[0][-1]|int)-1)/3)|int|abs }}' }
+        - { regexp: '^(\s*#sharding:\s+)', line: 'sharding:{{ newline }} clusterRole: shardsvr' }
+      register: mongo_data_config_written      
+    - name: Disable Transparent huge pages setting
+      when: mongo_data_config_written|success
+      copy:
+        src: disable-transparent-hugepages
+        dest: "/etc/init.d/disable-transparent-hugepages"
+        mode: 0755
+      register: mongo_data_disable_thp_setting
+    - name: run service disable transparent hugepages
+      when: mongo_data_disable_thp_setting|success
+      become: true
+      service:
+        name: disable-transparent-hugepages
+        state: started
+        enabled: yes
+      register: mongo_data_disable_thp_service
+    - name: Create a new profile for tuned daemon
+      when: mongo_data_disable_thp_service|success
+      become: true
+      file: path=/etc/tuned/no-thp state=directory
+      register: mongo_data_new_tuned_profile_create
+    - name: Configure new profile for tuned daemon
+      when: mongo_data_new_tuned_profile_create|success
+      become: true
+      copy:        
+        content: "[main]
+
+        include=virtual-guest
+        
+        [vm]
+        
+        transparent_hugepages=never
+        "
+        dest: /etc/tuned/no-thp/tuned.conf
+        force: no
+      register: mongo_data_new_tuned_profile_config
+    - name: Start new tuned profile
+      when: mongo_data_new_tuned_profile_config|success
+      become: true
+      shell: tuned-adm profile no-thp
+      register: mongo_data_start_new_tuned_profile
+    - name: Restart mongod in data nodes
+      when: mongo_data_start_new_tuned_profile|success
+      become: true
+      systemd:
+        name: mongod
+        daemon_reload: yes
+        state: restarted
+      register: mongo_data_mongod_restarted
+    - name: Initiate Mongo Data replica set
+      when: mongo_data_mongod_restarted is success and {{ ((ansible_nodename.split(".")[0][-1]|int)-1) % 3 }} == 0
+      become: true
+      mongodb_repl_set:
+        state: initiated
+        replSetMembers:  "{{ host_ip }}"
+        port: 27018
+      register: mongo_data_mongodb_repl_set_initiated
+  - hosts: mongos_nodes
+    vars:
+      newline: "\n"
+    tasks:
+    - name: Write Mongo query node settings in /etc/mongos.conf
+      when: add_mongos_nodes_to_hosts_file|success       
+      become: true
+      lineinfile:
+        dest: /etc/mongos.conf
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+        backrefs: true
+      with_items:        
+        - { regexp: '^(\s*port:\s+)', line: '\g<1>27017' }
+        - { regexp: '^(\s*bindIp:\s+)', line: '\g<1>{{ ansible_default_ipv4["address"] }}' }
+        - { regexp: '^(\s*#sharding:\s+)', line: "{{ 'sharding\n configDB: configReplSet/' + ':27019,'.join(groups['mongo_config_nodes']) + ':27019' }}" }
+      register: mongos_config_written      
+    - name: Disable Transparent huge pages setting
+      when: mongos_config_written|success
+      copy:
+        src: disable-transparent-hugepages
+        dest: "/etc/init.d/disable-transparent-hugepages"
+        mode: 0755
+      register: mongos_disable_thp_setting
+    - name: run service disable transparent hugepages
+      when: mongos_disable_thp_setting|success
+      become: true
+      service:
+        name: disable-transparent-hugepages
+        state: started
+        enabled: yes
+      register: mongos_disable_thp_service
+    - name: Create a new profile for tuned daemon
+      when: mongos_disable_thp_service|success
+      become: true
+      file: path=/etc/tuned/no-thp state=directory
+      register: mongos_new_tuned_profile_create
+    - name: Configure new profile for tuned daemon
+      when: mongos_new_tuned_profile_create|success
+      become: true
+      copy:        
+        content: "[main]
+
+        include=virtual-guest
+        
+        [vm]
+        
+        transparent_hugepages=never
+        "
+        dest: /etc/tuned/no-thp/tuned.conf
+        force: no
+      register: mongos_new_tuned_profile_config
+    - name: Start new tuned profile
+      when: mongos_new_tuned_profile_config|success
+      become: true
+      shell: tuned-adm profile no-thp
+      register: mongos_start_new_tuned_profile
+    - name: Restart mongos in query nodes
+      when: mongos_start_new_tuned_profile|success
+      become: true
+      systemd:
+        name: mongos
+        daemon_reload: yes
+        state: restarted
+      register: mongos_nodes_mongos_restarted
